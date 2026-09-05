@@ -27,6 +27,8 @@ Kabul: 30 dakikalık projede kurgu/kayıt/export senkron kalır; kayıp medya ye
 
 Ücretsiz Türkçe altyazı ve Apple Dikte/API uyumluluğu için [motor kararı](AUTO-CAPTIONS.md) esas alınır. Wispr Flow bağımlılığı yoktur. Intel/Sonoma'da whisper.cpp ana yol; uygun cihazda doğrulanmış Türkçe desteğiyle Apple motoru isteğe bağlıdır.
 
+0.3'te temel otomatik altyazı hattı eklendi: Small/Medium model indirme ve doğrulama, kaynak sesinden Türkçe tanıma, zamanlı önizleme, tek adımda uygulama/geri alma ve SRT/MP4 export. Aşağıdaki VAD, sessizlik temizleme ve kaynak-zamana bağlı kalıcı altyazı eşlemesi işleri devam ediyor; Apple motoru henüz uygulanmadı.
+
 1. PCM çıkarma, RMS analizi, konuşma algılama adaptörü.
 2. Minimum sessizlik, başlangıç/son payı ve kesim önizlemesi.
 3. Bağlı katmanlarda otomatik kesim; müzik için sürekli tut/kes seçimi.

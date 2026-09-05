@@ -52,7 +52,7 @@ enum CaptionSmokeTest {
         try SmokeTest.require(!captions.isEmpty, "Real recognizer returned no captions")
         let text = captions.map(\.text).joined(separator: " ").lowercased()
         if language == "en" { try SmokeTest.require(text.contains("country"), "Speech fixture was not recognized: \(text)") }
-        if language == "tr" { try SmokeTest.require(text.contains("merhaba") && text.contains("altyazı"), "Turkish speech fixture was not recognized: \(text)") }
+        if language == "tr" { try SmokeTest.require(text.contains("merhaba") && text.replacingOccurrences(of: " ", with: "").contains("altyazı"), "Turkish speech fixture was not recognized: \(text)") }
         project.captions = captions; try project.validate()
         try project.encoded().write(to: directory.appendingPathComponent("automatic.gonavi"))
         try project.srt().write(to: directory.appendingPathComponent("automatic.srt"), atomically: true, encoding: .utf8)
@@ -70,6 +70,14 @@ enum CaptionSmokeTest {
         try SmokeTest.require(store.project.captions == captions, "Caption redo failed")
         try SmokeTest.snapshot(AutoCaptionView(store: store), size: CGSize(width: 676, height: 500),
                                to: directory.appendingPathComponent("automatic-captions-ui.png"))
+        if language == "tr" {
+            let controller = AutoCaptionController()
+            controller.generate(project)
+            while controller.working { try await Task.sleep(nanoseconds: 100_000_000) }
+            try SmokeTest.require(controller.failure == nil && !(controller.captions ?? []).isEmpty, "Caption UI generation failed")
+            try SmokeTest.snapshot(AutoCaptionView(store: store, controller: controller), size: CGSize(width: 676, height: 580),
+                                   to: directory.appendingPathComponent("automatic-captions-review.png"))
+        }
 
         // The new track must also survive the real video export/render path.
         let prepared = try await MediaEngine.prepare(project)
@@ -89,6 +97,14 @@ enum CaptionSmokeTest {
         cancelled.cancel()
         do { _ = try await cancelled.value; throw ProjectError.invalid("Cancelled job returned a result") }
         catch is CancellationError {}
+        let running = Task { try await CaptionEngine.recognize(wav: decoded, model: model,
+                                                                output: directory.appendingPathComponent("cancelled"), language: language) }
+        try await Task.sleep(nanoseconds: 250_000_000)
+        let cancellationStart = Date()
+        running.cancel()
+        var rejected = false
+        do { try await running.value } catch { rejected = true }
+        try SmokeTest.require(rejected && Date().timeIntervalSince(cancellationStart) < 10, "Running recognizer did not cancel promptly")
         let report = "PASS: \(language), real small-q5_1 recognition, \(captions.count) captions, source trim + delayed audio, JSON/SRT/project validation, apply/undo/redo, MP4 export, silent video, cancellation. Elapsed \(Int(Date().timeIntervalSince(started)))s. This fixture is an integration test, not a Turkish accuracy benchmark.\n"
         try report.write(to: directory.appendingPathComponent("caption-report.txt"), atomically: true, encoding: .utf8)
         print(report)

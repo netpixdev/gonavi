@@ -47,9 +47,12 @@ final class AutoCaptionController: ObservableObject {
 
 // Hallmark · component: caption sheet · existing Gonavi theme
 // Native focus, pressed and disabled states; explicit loading/error/empty/review states.
-struct AutoCaptionView: View {
+@MainActor struct AutoCaptionView: View {
     @ObservedObject var store: EditorStore
-    @StateObject private var controller = AutoCaptionController()
+    @StateObject private var controller: AutoCaptionController
+    init(store: EditorStore, controller: AutoCaptionController? = nil) {
+        self.store = store; _controller = StateObject(wrappedValue: controller ?? AutoCaptionController())
+    }
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
             HStack(alignment: .top) {

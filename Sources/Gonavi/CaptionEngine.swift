@@ -110,7 +110,11 @@ enum CaptionEngine {
                     let prefix = folder.appendingPathComponent("transcript")
                     let json = prefix.appendingPathExtension("json")
                     try? FileManager.default.removeItem(at: json)
-                    try await recognize(wav: wav, model: model, output: prefix, language: language)
+                    let completed = timeline + position
+                    try await recognize(wav: wav, model: model, output: prefix, language: language) { fraction in
+                        report("Türkçe altyazı üretiliyor · \(label)",
+                               (completed.seconds + length.seconds * fraction) / max(1, project.duration.seconds))
+                    }
                     let captions = try WhisperTranscript.captions(from: Data(contentsOf: json), offset: timeline + position,
                                                                   limit: length, style: style)
                     result.append(contentsOf: captions)
@@ -124,14 +128,29 @@ enum CaptionEngine {
         return result
     }
 
-    static func recognize(wav: URL, model: URL, output: URL, language: String) async throws {
+    static func recognize(wav: URL, model: URL, output: URL, language: String,
+                          progress: @escaping @Sendable (Double) -> Void = { _ in }) async throws {
         var arguments = ["-m", model.path, "-f", wav.path, "-l", language, "-ojf", "-of", output.path,
                          "-t", String(min(8, max(1, ProcessInfo.processInfo.activeProcessorCount - 1))),
-                         "-sow", "-ml", "42", "-sns"]
+                         "-sow", "-ml", "42", "-sns", "-pp"]
         #if arch(x86_64)
         arguments.append("-ng")
         #endif
-        let process = CaptionProcess(executable: helperURL, arguments: arguments, log: output.appendingPathExtension("log"))
+        let log = output.appendingPathExtension("log")
+        let process = CaptionProcess(executable: helperURL, arguments: arguments, log: log)
+        let monitor = Task {
+            var previous = -1
+            while !Task.isCancelled {
+                do { try await Task.sleep(nanoseconds: 500_000_000) } catch { break }
+                if let text = try? String(contentsOf: log, encoding: .utf8),
+                   let tail = text.components(separatedBy: "progress = ").last,
+                   let value = Int(tail.prefix(while: { $0.isNumber || $0 == " " }).trimmingCharacters(in: .whitespaces)),
+                   value > previous, (0...100).contains(value) {
+                    previous = value; progress(Double(value) / 100)
+                }
+            }
+        }
+        defer { monitor.cancel() }
         try await withTaskCancellationHandler(operation: { try await process.run() }, onCancel: { process.cancel() })
     }
 
@@ -173,6 +192,7 @@ enum CaptionEngine {
             try Task.checkCancellation()
             guard let block = CMSampleBufferGetDataBuffer(sample) else { continue }
             let count = CMBlockBufferGetDataLength(block)
+            guard count > 0 else { continue }
             var data = Data(count: count)
             let code = data.withUnsafeMutableBytes { raw in
                 CMBlockBufferCopyDataBytes(block, atOffset: 0, dataLength: count, destination: raw.baseAddress!)
