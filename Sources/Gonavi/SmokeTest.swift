@@ -94,6 +94,8 @@ enum SmokeTest {
         try require(store.showingHome && !store.hasOpenProject, "Fresh launch must show welcome")
         try snapshot(WelcomeView(store: store), size: CGSize(width: 1280, height: 820),
                      to: directory.appendingPathComponent("welcome.png"))
+        try snapshot(WelcomeView(store: store), size: CGSize(width: 1040, height: 720),
+                     to: directory.appendingPathComponent("welcome-compact.png"))
         try snapshot(NewProjectView(store: store), size: CGSize(width: 714, height: 568),
                      to: directory.appendingPathComponent("new-project.png"))
         try require(store.createProject(name: "Hafta sonu günlüğü", scene: .portrait, fps: 30), "Create project failed")

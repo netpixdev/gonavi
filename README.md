@@ -1,18 +1,21 @@
 # Gonavi
 
-SwiftUI tabanlı, yerel çalışan macOS video editörü. **0.1 teknik temel**; CapCut kapsamındaki tam ürün henüz tamamlanmadı.
+SwiftUI tabanlı, yerel çalışan macOS video editörü. **0.2 teknik önizleme**; CapCut kapsamındaki tam ürün henüz tamamlanmadı.
 
 ## İndir ve çalıştır
 
 1. [Actions](https://github.com/netpixdev/gonavi/actions/workflows/macos.yml) sayfasında **başarılı** son çalışmayı aç.
-2. `Gonavi-macOS-arm64` artifact'ını indir. Artifact içindeki `Gonavi-macOS-arm64.zip` dosyasını aç.
+2. Intel Mac için `Gonavi-macOS-x86_64`, M serisi Mac için `Gonavi-macOS-arm64` artifact'ını indir. Artifact içindeki aynı adlı ZIP dosyasını aç.
 3. `Gonavi.app` dosyasını Applications klasörüne taşı ve aç.
 4. macOS geliştiriciyi doğrulayamadığını söylerse, bu uygulama için Sistem Ayarları → Gizlilik ve Güvenlik → Yine de Aç yolunu kullan.
 
-**Gereksinim:** Apple Silicon (M serisi), macOS 14+. Intel build bu aşamada yok. Ücretli Apple Developer hesabı gerekmez; uygulama ad-hoc imzalıdır, Developer ID imzası veya notarization yoktur. Gatekeeper'ın genel ayarlarını değiştirmek gerekmez.
+**Gereksinim:** macOS 14 Sonoma veya üzeri. Intel (`x86_64`) ve Apple Silicon (`arm64`) için ayrı paketler üretilir ve her biri kendi mimarisindeki macOS runner'da test edilir. Ücretli Apple Developer hesabı gerekmez; uygulama ad-hoc imzalıdır, Developer ID imzası veya notarization yoktur. Gatekeeper'ın genel ayarlarını değiştirmek gerekmez.
 
 ## Bu sürümde çalışan akış
 
+- Hesap gerektirmeyen başlangıç ekranı, son 12 proje, arama ve açık projeye dönüş.
+- Proje adı, oran ve FPS seçimiyle yeni proje oluşturma penceresi.
+- Kurtarılabilir oturumu açılışta gösterme; kullanıcı seçince devam etme.
 - Video/ses dosyası içe aktarma ve Finder'dan toplu sürükle bırak.
 - Bir ana video hattında ardışık klipler; klibi bölme, ripple silme, sürükleyerek yeniden sıralama.
 - 9:16, 16:9, 1:1, 4:5 sahneleri; 24/25/30/60 fps.
@@ -26,7 +29,9 @@ SwiftUI tabanlı, yerel çalışan macOS video editörü. **0.1 teknik temel**; 
 
 ### Hızlı kullanım
 
-`⌘I` ile iki video ekle. Timeline'da bir klibe tıkla. Zaman cetvelinde istediğin yere tıklayıp **Böl** de; istenmeyen parçayı seçip sil. Klip sekmesinden zoom/crop ayarla. Altyazı sekmesinde `+` ile metin ekle; zamanlarını saniye olarak düzenle. `⌘S` ile projeyi kaydet, `⌘E` ile video dışa aktar.
+Başlangıçta **Yeni proje** seç; ad, sahne oranı ve FPS belirleyip **Projeyi oluştur** de. `⌘I` ile iki video ekle. Timeline'da bir klibe tıkla. Zaman cetvelinde istediğin yere tıklayıp **Böl** de; istenmeyen parçayı seçip sil. Klip sekmesinden zoom/crop ayarla. Altyazı sekmesinde `+` ile metin ekle, **Metni Uygula** de; zamanlarını saniye olarak düzenle. `⌘S` ile projeyi kaydet, `⌘E` ile video dışa aktar.
+
+Editörün sol üstündeki çalışma alanı düğmesi başlangıca döner; açık proje korunur. Son projelerde sağ tık → **Geçmişten Kaldır**, yalnızca geçmiş kaydını kaldırır. Kaynak dosyayı silmez. Bir proje taşınırsa **Proje aç** ile yeni konumunu seçebilirsin.
 
 Timeline yakınlaştırma sağ üstteki kaydırıcıyla değişir. Klipler diğer klibin üzerine bırakılınca onun önüne taşınır. Bir klibi sona taşımak için son klibi onun önüne taşıyabilirsin; doğrudan boş alana bırakma henüz desteklenmez.
 
@@ -40,7 +45,7 @@ Timeline yakınlaştırma sağ üstteki kaydırıcıyla değişir. Klipler diğe
 - Render SDR/Rec.709 hedefler; HDR koruma ve profesyonel renk doğruluğu iddiası yoktur.
 - Yerel font ve bitmap altyazı; mevcut ilk tasarım uzun metin için en fazla 500 karakter kabul eder. Kısa altyazı blokları kullan.
 - Arayüz ve gerçek cihaz performansı Windows üzerinden doğrulanamaz. Başarılı CI, fiziksel Mac kabul testinin yerine geçmez.
-- Otomatik kurtarma tek oturum içindir; `~/Library/Application Support/Gonavi/recovery.json`. İçe aktarılan medya kopyalanmaz. Proje/medya ağ üzerinden gönderilmez.
+- Otomatik kurtarma tek oturum içindir; `~/Library/Application Support/Gonavi/recovery.json`. Kurtarmadan başka proje açılırsa önceki kurtarma `previous-session.gonavi` olarak yedeklenir. Bu tek yedek bir sonraki benzer durumda yenilenir. Son projeler `recents.json` içinde tutulur. İçe aktarılan medya kopyalanmaz. Proje/medya ağ üzerinden gönderilmez.
 
 ## Geliştirme
 
@@ -55,7 +60,7 @@ dist/Gonavi.app/Contents/MacOS/Gonavi --smoke-test dist/smoke
 
 SwiftUI/AVFoundation uygulaması Windows'ta derlenmez. Windows'tan kaynak değiştirip GitHub'a push yap; macOS Actions derler. Projeyi bir Mac'te `Package.swift` üzerinden Xcode ile de açabilirsin.
 
-CI, çekirdek kurgu testlerini çalıştırır; Release `.app` üretir; ad-hoc imzayı doğrular; kırmızı/yeşil video ve ses fixture'ları üretip gerçek MP4 export testi yapar. Test; süre, çözünürlük, klip sırası, ses hattı, altyazının görünmesi ve doğru zamanda kaybolmasını kontrol eder. `Gonavi-media-test` artifact'ı örnek video, kare ve rapor içerir.
+CI, Intel ve ARM üzerinde çekirdek kurgu testlerini çalıştırır; Release `.app` üretir; ikili dosyanın mimarisini ve ad-hoc imzayı doğrular; kırmızı/yeşil video ve ses fixture'ları üretip gerçek MP4 export testi yapar. Test; süre, çözünürlük, klip sırası, ses enerjisi, altyazının görünmesi ve doğru zamanda kaybolmasını kontrol eder. Ayrıca başlangıç/yeni proje/geçmiş/kurtarma durum geçişlerini doğrular. `Gonavi-media-test-arm64` ve `Gonavi-media-test-x86_64` artifact'ları örnek video, yerel SwiftUI ekran görüntüleri ve rapor içerir.
 
 ## Yapı
 
@@ -65,6 +70,7 @@ CI, çekirdek kurgu testlerini çalıştırır; Release `.app` üretir; ad-hoc i
 | `Sources/Gonavi/EditorStore.swift` | Komutlar, undo/redo, kayıt, iş durumu |
 | `Sources/Gonavi/MediaEngine.swift` | AVFoundation kompozisyon ve ortak Core Image compositor |
 | `Sources/Gonavi/EditorView.swift` | Yerel editör panelleri ve ilk timeline |
+| `Sources/Gonavi/WelcomeView.swift` | Başlangıç, son projeler ve proje oluşturma |
 | `Sources/Gonavi/SmokeTest.swift` | Üretilmiş medya ile gerçek export doğrulaması |
 | `.github/workflows/macos.yml` | macOS build ve test |
 

@@ -8,6 +8,8 @@
 - [x] Kaydet/aç, atomik kurtarma kaydı, undo/redo.
 - [x] Ortak compositor ile preview/export; gerçek medya smoke testi.
 - [x] GitHub Actions, ad-hoc paket ve indirilebilir artifact.
+- [x] Intel ve Apple Silicon için ayrı macOS build/test matrisi.
+- [x] Başlangıç ekranı, son projeler, yeni proje kurulumu, açık çalışmaya dönüş.
 - [ ] Kullanıcının Mac'inde ilk açılış ve etkileşim testi.
 
 ## Aşama 2: güvenilir timeline
@@ -46,7 +48,7 @@ Keyframe/easing, crop tutamakları, hız, freeze frame, geçişler, renk ayarı,
 - Kaynak dosyalar değişmez; proje düzenleme talimatlarını saklar.
 - Export sabit snapshot kullanır. UI ve renderer aynı proje modelini tüketir.
 - Yapay zekâ/analiz UI'dan bağımsızdır; ilerleme/iptal zorunludur.
-- İlk çıktı Apple Silicon/macOS 14+. Intel kullanıcı cihazına göre ayrıca doğrulanır.
+- Intel ve Apple Silicon ayrı paketlerdir; minimum macOS 14 Sonoma. İki mimaride bağımsız CI doğrulaması yapılır.
 - Her aşama başarılı CI ve fiziksel Mac kabul testiyle kapanır.
 - İlk aşamadaki timeline-anchored altyazılar ve tek track, tam ürün mimarisinin yerine geçmez; migration ile genişletilir.
 
