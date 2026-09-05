@@ -25,6 +25,8 @@ Kabul: 30 dakikalık projede kurgu/kayıt/export senkron kalır; kayıp medya ye
 
 ## Aşama 3: konuşma videoları
 
+Ücretsiz Türkçe altyazı ve Apple Dikte/API uyumluluğu için [motor kararı](AUTO-CAPTIONS.md) esas alınır. Wispr Flow bağımlılığı yoktur. Intel/Sonoma'da whisper.cpp ana yol; uygun cihazda doğrulanmış Türkçe desteğiyle Apple motoru isteğe bağlıdır.
+
 1. PCM çıkarma, RMS analizi, konuşma algılama adaptörü.
 2. Minimum sessizlik, başlangıç/son payı ve kesim önizlemesi.
 3. Bağlı katmanlarda otomatik kesim; müzik için sürekli tut/kes seçimi.
