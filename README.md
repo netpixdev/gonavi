@@ -45,7 +45,7 @@ Timeline yakınlaştırma sağ üstteki kaydırıcıyla değişir. Klipler diğe
 - Render SDR/Rec.709 hedefler; HDR koruma ve profesyonel renk doğruluğu iddiası yoktur.
 - Yerel font ve bitmap altyazı; mevcut ilk tasarım uzun metin için en fazla 500 karakter kabul eder. Kısa altyazı blokları kullan.
 - Arayüz ve gerçek cihaz performansı Windows üzerinden doğrulanamaz. Başarılı CI, fiziksel Mac kabul testinin yerine geçmez.
-- Otomatik kurtarma tek oturum içindir; `~/Library/Application Support/Gonavi/recovery.json`. Kurtarmadan başka proje açılırsa önceki kurtarma `previous-session.gonavi` olarak yedeklenir. Bu tek yedek bir sonraki benzer durumda yenilenir. Son projeler `recents.json` içinde tutulur. İçe aktarılan medya kopyalanmaz. Proje/medya ağ üzerinden gönderilmez.
+- Aktif oturumun otomatik kaydı `~/Library/Application Support/Gonavi/recovery.json` içindedir. Kurtarmadan başka proje açılırsa önceki oturum `Recovered Projects` altında ayrı bir `.gonavi` dosyası olarak korunur ve son projelere eklenir. Önceki kurtarmaların üzerine yazılmaz. Son projeler `recents.json` içinde tutulur. İçe aktarılan medya kopyalanmaz. Proje/medya ağ üzerinden gönderilmez.
 
 ## Geliştirme
 

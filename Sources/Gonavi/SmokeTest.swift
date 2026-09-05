@@ -111,6 +111,15 @@ enum SmokeTest {
         try require(restored.showingHome && restored.recoveryAvailable, "Recovery must be offered, not auto-opened")
         restored.resumeProject()
         try require(restored.project == projectBeforeHome && !restored.showingHome, "Recovery failed")
+        let secondSession = EditorStore(storageDirectory: stateDirectory)
+        try require(secondSession.createProject(name: "İkinci oturum", scene: .square, fps: 30), "Second session creation failed")
+        let firstBackup = secondSession.recentProjects[0].path
+        let thirdSession = EditorStore(storageDirectory: stateDirectory)
+        try require(thirdSession.createProject(name: "Üçüncü oturum", scene: .landscape, fps: 30), "Third session creation failed")
+        try require(thirdSession.recentProjects.count == 2, "Preserved sessions must remain discoverable")
+        try require(thirdSession.recentProjects[0].path != firstBackup, "Recovery backups must have unique paths")
+        let firstPreserved = try Project.decode(Data(contentsOf: URL(fileURLWithPath: firstBackup)))
+        try require(firstPreserved == projectBeforeHome, "Earlier recovery was overwritten")
         let opener = EditorStore(storageDirectory: directory.appendingPathComponent("recent-state"))
         opener.loadProject(at: directory.appendingPathComponent("smoke.gonavi"))
         try require(opener.recentProjects.count == 1 && !opener.showingHome, "Open must record recent project")
@@ -125,13 +134,17 @@ enum SmokeTest {
 
     @MainActor private static func snapshot<V: View>(_ root: V, size: CGSize, to url: URL) throws {
         let view = NSHostingView(rootView: root.preferredColorScheme(.dark).frame(width: size.width, height: size.height))
-        let window = NSWindow(contentRect: NSRect(origin: .zero, size: size),
+        let window = SnapshotWindow(contentRect: NSRect(origin: .zero, size: size),
                               styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
+        view.sizingOptions = []
         window.contentView = view
         window.appearance = NSAppearance(named: .darkAqua)
         view.frame = NSRect(origin: .zero, size: size)
         window.orderFront(nil)
+        window.setContentSize(size)
+        view.frame = NSRect(origin: .zero, size: size)
         view.layoutSubtreeIfNeeded(); view.display()
+        try require(view.bounds.size == size, "Snapshot view was constrained by runner display size")
         guard let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) else {
             throw ProjectError.invalid("UI bitmap creation failed")
         }
@@ -197,4 +210,10 @@ enum SmokeTest {
         }
         return (Double(data[center]), Double(data[center + 1]), bright)
     }
+}
+
+/// Hosted CI screens are often only 1024×768. Capture the requested layout size,
+/// including the area outside that display, instead of clipping a fixed SwiftUI root.
+private final class SnapshotWindow: NSWindow {
+    override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect { frameRect }
 }

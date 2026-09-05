@@ -149,9 +149,16 @@ final class EditorStore: ObservableObject {
     }
     /// Starting another project must not silently destroy a recoverable session.
     private func preserveRecovery() throws {
-        guard recoveryAvailable, FileManager.default.fileExists(atPath: recoveryURL.path) else { return }
-        let backup = recoveryURL.deletingLastPathComponent().appendingPathComponent("previous-session.gonavi")
+        guard recoveryAvailable, let recovered = recoveredProject,
+              FileManager.default.fileExists(atPath: recoveryURL.path) else { return }
+        let directory = recoveryURL.deletingLastPathComponent().appendingPathComponent("Recovered Projects")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let backup = directory.appendingPathComponent("\(UUID().uuidString).gonavi")
         try Data(contentsOf: recoveryURL).write(to: backup, options: .atomic)
+        let entry = RecentProject(path: backup.path, name: "Kurtarma · \(recovered.name)",
+                                  scene: recovered.scene, duration: recovered.duration)
+        recentProjects = RecentProject.recording(entry, in: recentProjects)
+        saveRecents()
         recoveredProject = nil; recoveryAvailable = false
     }
     private func remember(_ url: URL) {
@@ -347,6 +354,7 @@ final class EditorStore: ObservableObject {
         session.outputURL = temporary; session.outputFileType = .mp4
         session.videoComposition = prepared.videoComposition; session.audioMix = prepared.audioMix
         session.shouldOptimizeForNetworkUse = true
+        showingHome = false
         exporting = true; exportProgress = 0; exportSession = session
         player.pause(); isPlaying = false
         Task {
