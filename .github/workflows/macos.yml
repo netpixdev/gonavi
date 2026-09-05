@@ -1,0 +1,47 @@
+name: macOS build and media test
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: gonavi-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode
+        run: |
+          sudo xcode-select -s /Applications/Xcode_16.4.app/Contents/Developer
+          xcodebuild -version
+          swift --version
+          test "$(uname -m)" = arm64
+      - name: Core tests
+        run: swift test --parallel
+      - name: Package and verify ad-hoc signature
+        run: bash scripts/build-app.sh
+      - name: Actual video export smoke test
+        run: dist/Gonavi.app/Contents/MacOS/Gonavi --smoke-test dist/smoke
+      - name: Upload application
+        uses: actions/upload-artifact@v4
+        with:
+          name: Gonavi-macOS-arm64
+          path: |
+            dist/Gonavi-macOS-arm64.zip
+            dist/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 14
+      - name: Upload media verification artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Gonavi-media-test
+          path: dist/smoke/
+          if-no-files-found: ignore
+          retention-days: 7
