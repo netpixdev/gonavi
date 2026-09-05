@@ -21,6 +21,8 @@ struct EditorView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            editorHeader
+            Divider()
             HSplitView {
                 mediaPanel.frame(minWidth: 200, idealWidth: 235, maxWidth: 290)
                 preview.frame(minWidth: 440, maxWidth: .infinity, maxHeight: .infinity)
@@ -37,23 +39,6 @@ struct EditorView: View {
             }.font(.caption).foregroundStyle(Theme.secondary).padding(.horizontal, 16).frame(height: 28)
         }
         .background(Theme.canvas).tint(Theme.accent)
-        .toolbar {
-            ToolbarItem(placement: .navigation) {
-                HStack(spacing: 6) {
-                    Text("GONAVI").font(.system(size: 13, weight: .black, design: .rounded)).tracking(2)
-                    Text("/  \(store.project.name)\(store.dirty ? " •" : "")").foregroundStyle(Theme.secondary)
-                }
-            }
-            ToolbarItemGroup {
-                Button(action: store.chooseMedia) { Label("Medya Ekle", systemImage: "plus") }.disabled(!store.editable)
-                Button { store.save() } label: { Image(systemName: "square.and.arrow.down") }.help("Projeyi kaydet · ⌘S")
-                Button(action: store.undo) { Image(systemName: "arrow.uturn.backward") }.disabled(!store.canUndo || !store.editable).help("Geri al · ⌘Z")
-                Button(action: store.exportVideo) { Label("Dışa Aktar", systemImage: "arrow.up.right") }.disabled(!store.canExport)
-            }
-        }
-        .alert("İşlem tamamlanamadı", isPresented: Binding(get: { store.error != nil }, set: { if !$0 { store.error = nil } })) {
-            Button("Tamam") { store.error = nil }
-        } message: { Text(store.error ?? "") }
         .sheet(isPresented: Binding(get: { store.exporting }, set: { _ in })) {
             VStack(alignment: .leading, spacing: 20) {
                 Text("Video hazırlanıyor").font(.title2.bold())
@@ -62,6 +47,30 @@ struct EditorView: View {
                 HStack { Text("%\(Int(store.exportProgress * 100))").monospacedDigit(); Spacer(); Button("İptal", action: store.cancelExport) }
             }.padding(32).frame(width: 420).interactiveDismissDisabled()
         }
+    }
+
+    private var editorHeader: some View {
+        HStack(spacing: 16) {
+            Button(action: store.goHome) { Image(systemName: "square.grid.2x2") }
+                .buttonStyle(.borderless).help("Başlangıç ekranı").disabled(!store.editable)
+            GonaviMark()
+            Divider().frame(height: 20)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(store.project.name).font(.system(size: 13, weight: .semibold)).lineLimit(1)
+                Text(store.dirty ? "Kaydedilmemiş değişiklikler" : "Proje kaydedildi")
+                    .font(.system(size: 10)).foregroundStyle(Theme.secondary)
+            }
+            Spacer()
+            Button(action: store.undo) { Image(systemName: "arrow.uturn.backward") }
+                .buttonStyle(.borderless).disabled(!store.canUndo || !store.editable).help("Geri al · ⌘Z")
+            Button(action: store.redo) { Image(systemName: "arrow.uturn.forward") }
+                .buttonStyle(.borderless).disabled(!store.canRedo || !store.editable).help("Yinele · ⇧⌘Z")
+            Divider().frame(height: 20)
+            Button(action: store.chooseMedia) { Label("Medya Ekle", systemImage: "plus") }.disabled(!store.editable)
+            Button { store.save() } label: { Image(systemName: "square.and.arrow.down") }.help("Projeyi kaydet · ⌘S")
+            Button(action: store.exportVideo) { Label("Dışa Aktar", systemImage: "arrow.up.right") }
+                .buttonStyle(.borderedProminent).tint(Theme.accent).foregroundStyle(Theme.onAccent).disabled(!store.canExport)
+        }.padding(.horizontal, 20).frame(height: 58).background(Theme.panel)
     }
 
     private var mediaPanel: some View {
@@ -155,7 +164,7 @@ struct EditorView: View {
         VStack(spacing: 0) {
             Picker("Özellikler", selection: $inspectorTab) {
                 Text("Sahne").tag(0); Text("Klip").tag(1); Text("Altyazı").tag(2)
-            }.pickerStyle(.segmented).padding(12)
+            }.pickerStyle(.segmented).labelsHidden().padding(12)
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     if inspectorTab == 0 { sceneInspector }

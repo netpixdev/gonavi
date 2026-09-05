@@ -19,6 +19,11 @@ final class EditorStore: ObservableObject {
     @Published var status = "Videolarınızı içe aktararak başlayın."
     @Published var dirty = false
     @Published var revision = 0
+    @Published var showingHome = true
+    @Published var creatingProject = false
+    @Published private(set) var hasOpenProject = false
+    @Published private(set) var recoveryAvailable = false
+    @Published private(set) var recentProjects: [RecentProject] = []
     let player = AVPlayer()
     private var fileURL: URL?
     private var undoStack: [Project] = []
@@ -31,15 +36,23 @@ final class EditorStore: ObservableObject {
     private var timeObserver: Any?
     private var playerStatusObserver: NSKeyValueObservation?
     private let recoveryURL: URL
+    private let recentsURL: URL
+    private var recoveredProject: Project?
     var canUndo: Bool { !undoStack.isEmpty }
     var canRedo: Bool { !redoStack.isEmpty }
     var activeClip: VideoClip? { project.clips.first { $0.id == selectedClip } }
     var editable: Bool { !importing && !exporting }
     var canExport: Bool { !project.clips.isEmpty && prepared != nil && !isBuilding && editable }
 
-    init() {
-        recoveryURL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Gonavi/recovery.json")
+    init(storageDirectory: URL? = nil) {
+        let directory = storageDirectory ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Gonavi")
+        recoveryURL = directory.appendingPathComponent("recovery.json")
+        recentsURL = directory.appendingPathComponent("recents.json")
+        if let data = try? Data(contentsOf: recentsURL),
+           let recents = try? JSONDecoder().decode([RecentProject].self, from: data) {
+            recentProjects = Array(recents.prefix(12))
+        }
         timeObserver = player.addPeriodicTimeObserver(forInterval: CMTime(value: 1, timescale: 30), queue: .main) { [weak self] time in
             Task { @MainActor [weak self] in
                 guard let self else { return }
@@ -48,10 +61,8 @@ final class EditorStore: ObservableObject {
             }
         }
         if let data = try? Data(contentsOf: recoveryURL), let recovered = try? Project.decode(data),
-           !recovered.sources.isEmpty {
-            project = recovered; dirty = true; selectedClip = project.clips.first?.id
-            status = "Önceki oturum kurtarıldı. Projeyi kaydedebilirsiniz."
-            rebuild()
+           !recovered.sources.isEmpty || recovered.name != "Yeni proje" {
+            recoveredProject = recovered; recoveryAvailable = true
         }
     }
 
@@ -109,20 +120,85 @@ final class EditorStore: ObservableObject {
         }
     }
     func newProject() {
-        guard confirmDiscard() else { return }
-        project = Project(); fileURL = nil; dirty = false; resetHistory(); autosave(); rebuild()
+        guard editable else { return }
+        creatingProject = true
+    }
+    @discardableResult func createProject(name: String, scene: ScenePreset, fps: Int) -> Bool {
+        guard confirmDiscard() else { return false }
+        var next = Project()
+        next.name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        if next.name.isEmpty { next.name = "İsimsiz proje" }
+        next.scene = scene; next.fps = fps
+        do { try next.validate(); try preserveRecovery() }
+        catch { self.error = error.localizedDescription; return false }
+        project = next; fileURL = nil; dirty = true; resetHistory()
+        hasOpenProject = true; showingHome = false; creatingProject = false
+        autosave(); rebuild(); status = "Proje hazır. Video eklemek için ⌘I."
+        return true
+    }
+    func goHome() {
+        guard editable else { return }
+        player.pause(); isPlaying = false; showingHome = true
+    }
+    func resumeProject() {
+        if hasOpenProject { showingHome = false; return }
+        guard let recovered = recoveredProject else { return }
+        project = recovered; hasOpenProject = true; dirty = true
+        recoveredProject = nil; recoveryAvailable = false; showingHome = false
+        resetHistory(); rebuild(); status = "Önceki oturum kurtarıldı. Projeyi kaydedebilirsiniz."
+    }
+    /// Starting another project must not silently destroy a recoverable session.
+    private func preserveRecovery() throws {
+        guard recoveryAvailable, FileManager.default.fileExists(atPath: recoveryURL.path) else { return }
+        let backup = recoveryURL.deletingLastPathComponent().appendingPathComponent("previous-session.gonavi")
+        try Data(contentsOf: recoveryURL).write(to: backup, options: .atomic)
+        recoveredProject = nil; recoveryAvailable = false
+    }
+    private func remember(_ url: URL) {
+        let entry = RecentProject(path: url.path,
+                                  bookmark: try? url.bookmarkData(options: [], includingResourceValuesForKeys: nil, relativeTo: nil),
+                                  name: project.name, scene: project.scene, duration: project.duration)
+        recentProjects = RecentProject.recording(entry, in: recentProjects)
+        saveRecents()
+    }
+    private func saveRecents() {
+        do {
+            try FileManager.default.createDirectory(at: recentsURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try JSONEncoder().encode(recentProjects).write(to: recentsURL, options: .atomic)
+        } catch { self.error = "Proje geçmişi kaydedilemedi: \(error.localizedDescription)" }
+    }
+    func removeRecent(_ recent: RecentProject) {
+        recentProjects.removeAll { $0.id == recent.id }; saveRecents()
+    }
+    func openRecent(_ recent: RecentProject) {
+        var stale = false
+        let bookmarked = recent.bookmark.flatMap {
+            try? URL(resolvingBookmarkData: $0, options: [.withoutUI], relativeTo: nil, bookmarkDataIsStale: &stale)
+        }
+        let url = bookmarked ?? URL(fileURLWithPath: recent.path)
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            error = "\(recent.name) bulunamadı. Dosya taşındıysa ‘Proje Aç’ ile yeni konumunu seçin."
+            return
+        }
+        loadProject(at: url)
     }
     private func resetHistory() {
         undoStack.removeAll(); redoStack.removeAll(); revision += 1
         selectedClip = project.clips.first?.id; selectedCaption = nil; playhead = 0
     }
     func open() {
-        guard confirmDiscard() else { return }
+        guard editable else { return }
         let panel = NSOpenPanel(); panel.allowedContentTypes = [UTType(filenameExtension: "gonavi") ?? .json]
         guard panel.runModal() == .OK, let url = panel.url else { return }
+        loadProject(at: url)
+    }
+    func loadProject(at url: URL) {
+        guard confirmDiscard() else { return }
         do {
             let loaded = try Project.decode(Data(contentsOf: url))
+            try preserveRecovery()
             project = loaded; fileURL = url; dirty = false; resetHistory(); autosave(); rebuild()
+            hasOpenProject = true; showingHome = false; remember(url)
             status = "Proje açıldı: \(url.lastPathComponent)"
         } catch { self.error = error.localizedDescription }
     }
@@ -138,11 +214,13 @@ final class EditorStore: ObservableObject {
         do {
             try project.encoded().write(to: destination, options: .atomic)
             fileURL = destination; dirty = false; status = "Kaydedildi: \(destination.lastPathComponent)"
+            remember(destination)
             return true
         } catch { self.error = error.localizedDescription; return false }
     }
     func chooseMedia() {
         guard editable else { return }
+        if !hasOpenProject { newProject(); return }
         let panel = NSOpenPanel(); panel.allowsMultipleSelection = true
         panel.allowedContentTypes = [.movie, .audio]; panel.canChooseDirectories = false
         guard panel.runModal() == .OK else { return }

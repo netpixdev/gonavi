@@ -12,7 +12,16 @@ concurrency:
   cancel-in-progress: true
 jobs:
   build:
-    runs-on: macos-15
+    name: Build and test (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            arch: arm64
+          - runner: macos-15-intel
+            arch: x86_64
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
@@ -21,7 +30,7 @@ jobs:
           sudo xcode-select -s /Applications/Xcode_16.4.app/Contents/Developer
           xcodebuild -version
           swift --version
-          test "$(uname -m)" = arm64
+          test "$(uname -m)" = "${{ matrix.arch }}"
       - name: Core tests
         run: swift test --parallel
       - name: Package and verify ad-hoc signature
@@ -31,9 +40,9 @@ jobs:
       - name: Upload application
         uses: actions/upload-artifact@v4
         with:
-          name: Gonavi-macOS-arm64
+          name: Gonavi-macOS-${{ matrix.arch }}
           path: |
-            dist/Gonavi-macOS-arm64.zip
+            dist/Gonavi-macOS-${{ matrix.arch }}.zip
             dist/SHA256SUMS.txt
           if-no-files-found: error
           retention-days: 14
@@ -41,7 +50,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: Gonavi-media-test
+          name: Gonavi-media-test-${{ matrix.arch }}
           path: dist/smoke/
           if-no-files-found: ignore
           retention-days: 7

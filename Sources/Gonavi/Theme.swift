@@ -10,6 +10,7 @@ enum Theme {
     static let ink = Color.primary
     static let secondary = Color.secondary
     static let accent = Color(red: 0.49, green: 0.89, blue: 0.72)
+    static let onAccent = Color(red: 0.07, green: 0.16, blue: 0.12)
     static let video = Color(red: 0.22, green: 0.43, blue: 0.39)
     static let audio = Color(red: 0.31, green: 0.35, blue: 0.56)
     static let caption = Color(red: 0.55, green: 0.43, blue: 0.22)

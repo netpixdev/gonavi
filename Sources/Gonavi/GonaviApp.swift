@@ -16,12 +16,12 @@ struct GonaviApp: App {
     @StateObject private var store = EditorStore()
     var body: some Scene {
         Window("Gonavi", id: "editor") {
-            EditorView(store: store)
+            WorkspaceView(store: store)
                 .onAppear { delegate.store = store }
                 .frame(minWidth: 1040, minHeight: 720)
                 .preferredColorScheme(.dark)
         }
-        .defaultSize(width: 1440, height: 940)
+        .defaultSize(width: 1280, height: 820)
         .commands {
             CommandGroup(replacing: .newItem) {
                 Button("Yeni Proje", action: store.newProject).keyboardShortcut("n").disabled(!store.editable)
@@ -29,8 +29,8 @@ struct GonaviApp: App {
                 Button("Medya Ekle…", action: store.chooseMedia).keyboardShortcut("i").disabled(!store.editable)
             }
             CommandGroup(replacing: .saveItem) {
-                Button("Kaydet") { store.save() }.keyboardShortcut("s")
-                Button("Farklı Kaydet…") { store.save(asNew: true) }.keyboardShortcut("s", modifiers: [.command, .shift])
+                Button("Kaydet") { store.save() }.keyboardShortcut("s").disabled(!store.hasOpenProject)
+                Button("Farklı Kaydet…") { store.save(asNew: true) }.keyboardShortcut("s", modifiers: [.command, .shift]).disabled(!store.hasOpenProject)
                 Button("Video Dışa Aktar…", action: store.exportVideo).keyboardShortcut("e").disabled(!store.canExport)
             }
             CommandGroup(replacing: .undoRedo) {

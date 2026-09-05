@@ -59,7 +59,7 @@ enum SmokeTest {
         try png.representation(using: .png, properties: [:])?.write(to: directory.appendingPathComponent("caption-frame.png"))
         try project.srt().write(to: directory.appendingPathComponent("captions.srt"), atomically: true, encoding: .utf8)
         try await snapshotUI(directory: directory)
-        let report = "PASS: project round-trip, 4s export, 1920×1080, two ordered clips, audio RMS \(rms), caption visibility and timing. UI snapshot generated for visual inspection.\n"
+        let report = "PASS: project round-trip, 4s export, 1920×1080, two ordered clips, audio RMS \(rms), caption visibility and timing. Welcome/create/recent/recovery navigation passed. Native UI snapshots generated for visual inspection.\n"
         try report.write(to: directory.appendingPathComponent("report.txt"), atomically: true, encoding: .utf8)
     }
 
@@ -89,20 +89,52 @@ enum SmokeTest {
 
     @MainActor private static func snapshotUI(directory: URL) throws {
         _ = NSApplication.shared
-        let store = EditorStore()
-        let view = NSHostingView(rootView: EditorView(store: store).preferredColorScheme(.dark))
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1440, height: 900),
+        let stateDirectory = directory.appendingPathComponent("ui-state")
+        let store = EditorStore(storageDirectory: stateDirectory)
+        try require(store.showingHome && !store.hasOpenProject, "Fresh launch must show welcome")
+        try snapshot(WelcomeView(store: store), size: CGSize(width: 1280, height: 820),
+                     to: directory.appendingPathComponent("welcome.png"))
+        try snapshot(NewProjectView(store: store), size: CGSize(width: 714, height: 568),
+                     to: directory.appendingPathComponent("new-project.png"))
+        try require(store.createProject(name: "Hafta sonu günlüğü", scene: .portrait, fps: 30), "Create project failed")
+        try require(!store.showingHome && store.hasOpenProject && store.project.scene == .portrait, "Create must enter editor")
+        let projectBeforeHome = store.project
+        store.goHome()
+        try require(store.showingHome && store.project == projectBeforeHome, "Home navigation discarded project")
+        store.resumeProject()
+        try require(!store.showingHome && store.project == projectBeforeHome, "Resume changed project")
+        try snapshot(EditorView(store: store), size: CGSize(width: 1280, height: 820),
+                     to: directory.appendingPathComponent("editor-empty.png"))
+        let restored = EditorStore(storageDirectory: stateDirectory)
+        try require(restored.showingHome && restored.recoveryAvailable, "Recovery must be offered, not auto-opened")
+        restored.resumeProject()
+        try require(restored.project == projectBeforeHome && !restored.showingHome, "Recovery failed")
+        let opener = EditorStore(storageDirectory: directory.appendingPathComponent("recent-state"))
+        opener.loadProject(at: directory.appendingPathComponent("smoke.gonavi"))
+        try require(opener.recentProjects.count == 1 && !opener.showingHome, "Open must record recent project")
+        opener.goHome()
+        try snapshot(WelcomeView(store: opener), size: CGSize(width: 1280, height: 820),
+                     to: directory.appendingPathComponent("welcome-recent.png"))
+        opener.openRecent(opener.recentProjects[0])
+        try require(opener.recentProjects.count == 1 && !opener.showingHome, "Recent reopening failed")
+        opener.removeRecent(opener.recentProjects[0])
+        try require(opener.recentProjects.isEmpty && FileManager.default.fileExists(atPath: directory.appendingPathComponent("smoke.gonavi").path), "Remove recent must preserve project file")
+    }
+
+    @MainActor private static func snapshot<V: View>(_ root: V, size: CGSize, to url: URL) throws {
+        let view = NSHostingView(rootView: root.preferredColorScheme(.dark).frame(width: size.width, height: size.height))
+        let window = NSWindow(contentRect: NSRect(origin: .zero, size: size),
                               styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
         window.contentView = view
         window.appearance = NSAppearance(named: .darkAqua)
-        view.frame = NSRect(x: 0, y: 0, width: 1440, height: 900)
+        view.frame = NSRect(origin: .zero, size: size)
         window.orderFront(nil)
         view.layoutSubtreeIfNeeded(); view.display()
         guard let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) else {
             throw ProjectError.invalid("UI bitmap creation failed")
         }
         view.cacheDisplay(in: view.bounds, to: bitmap)
-        try bitmap.representation(using: .png, properties: [:])?.write(to: directory.appendingPathComponent("editor-empty.png"))
+        try bitmap.representation(using: .png, properties: [:])?.write(to: url)
         window.orderOut(nil)
     }
 
