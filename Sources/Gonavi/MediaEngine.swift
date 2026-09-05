@@ -199,15 +199,17 @@ enum MediaEngine {
         let textWidth = size.width * 0.84
         let measured = text.boundingRect(with: CGSize(width: textWidth, height: size.height * 0.5),
                                          options: [.usesLineFragmentOrigin, .usesFontLeading])
-        let rect = CGRect(x: size.width * 0.08, y: size.height * 0.1,
-                          width: textWidth, height: ceil(measured.height) + 12)
-        guard let bitmap = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(size.width),
-                                           pixelsHigh: Int(size.height), bitsPerSample: 8, samplesPerPixel: 4,
+        // Keep only the caption-sized bitmap; a full 1080p bitmap per line would
+        // retain hundreds of MB for an ordinary transcript.
+        let rect = CGRect(x: 16, y: 8, width: textWidth, height: ceil(measured.height) + 12)
+        let bitmapSize = CGSize(width: ceil(textWidth + 32), height: ceil(rect.height + 16))
+        guard let bitmap = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(bitmapSize.width),
+                                           pixelsHigh: Int(bitmapSize.height), bitsPerSample: 8, samplesPerPixel: 4,
                                            hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB,
                                            bytesPerRow: 0, bitsPerPixel: 0),
               let graphics = NSGraphicsContext(bitmapImageRep: bitmap) else { return nil }
         NSGraphicsContext.saveGraphicsState(); NSGraphicsContext.current = graphics
-        NSColor.clear.setFill(); NSRect(origin: .zero, size: size).fill(using: .copy)
+        NSColor.clear.setFill(); NSRect(origin: .zero, size: bitmapSize).fill(using: .copy)
         if caption.style == .box {
             NSColor.black.withAlphaComponent(0.8).setFill()
             NSBezierPath(roundedRect: rect.insetBy(dx: -16, dy: -8), xRadius: 12, yRadius: 12).fill()
@@ -216,6 +218,7 @@ enum MediaEngine {
         NSGraphicsContext.restoreGraphicsState()
         guard let cgImage = bitmap.cgImage else { return nil }
         return RenderCaption(start: caption.start.seconds, end: (caption.start + caption.duration).seconds,
-                             image: CIImage(cgImage: cgImage))
+                             image: CIImage(cgImage: cgImage).transformed(by: .init(
+                                translationX: size.width * 0.08 - 16, y: size.height * 0.1 - 8)))
     }
 }
