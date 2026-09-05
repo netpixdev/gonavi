@@ -34,12 +34,12 @@ final class FrameInstruction: NSObject, AVVideoCompositionInstructionProtocol {
 /// Both AVPlayer and AVAssetExportSession consume these same instructions.
 /// Rendering stays off the main thread. No mutable project state is read here.
 final class GonaviCompositor: NSObject, AVVideoCompositing {
-    var sourcePixelBufferAttributes: [String: Any]? {
+    var sourcePixelBufferAttributes: [String: any Sendable]? {
         [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA]
     }
-    var requiredPixelBufferAttributesForRenderContext: [String: Any] {
+    var requiredPixelBufferAttributesForRenderContext: [String: any Sendable] {
         [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
-         kCVPixelBufferIOSurfacePropertiesKey as String: [:]]
+         kCVPixelBufferIOSurfacePropertiesKey as String: [String: Int]()]
     }
     private let queue = DispatchQueue(label: "app.gonavi.compositor", qos: .userInitiated)
     private let context = CIContext(options: [.workingColorSpace: CGColorSpace(name: CGColorSpace.sRGB)!])
@@ -47,7 +47,10 @@ final class GonaviCompositor: NSObject, AVVideoCompositing {
     func cancelAllPendingVideoCompositionRequests() { queue.sync {} }
     func startRequest(_ request: AVAsynchronousVideoCompositionRequest) {
         queue.async {
-            autoreleasepool {
+            autoreleasepool { self.render(request) }
+        }
+    }
+    private func render(_ request: AVAsynchronousVideoCompositionRequest) {
                 guard let instruction = request.videoCompositionInstruction as? FrameInstruction,
                       let source = request.sourceFrame(byTrackID: instruction.trackID),
                       let output = request.renderContext.newPixelBuffer() else {
@@ -58,11 +61,12 @@ final class GonaviCompositor: NSObject, AVVideoCompositing {
                 let extent = image.extent
                 image = image.transformed(by: .init(translationX: -extent.minX, y: -extent.minY))
                 let xScale = bounds.width / extent.width, yScale = bounds.height / extent.height
-                let scale = (instruction.clip.fill ? max(xScale, yScale) : min(xScale, yScale)) * instruction.clip.zoom
+                let baseScale: CGFloat = instruction.clip.fill ? max(xScale, yScale) : min(xScale, yScale)
+                let scale: CGFloat = baseScale * CGFloat(instruction.clip.zoom)
                 image = image.transformed(by: .init(scaleX: scale, y: scale))
-                image = image.transformed(by: .init(
-                    translationX: (bounds.width - extent.width * scale) / 2 + instruction.clip.offsetX * bounds.width / 2,
-                    y: (bounds.height - extent.height * scale) / 2 + instruction.clip.offsetY * bounds.height / 2))
+                let offsetX: CGFloat = (bounds.width - extent.width * scale) / 2 + CGFloat(instruction.clip.offsetX) * bounds.width / 2
+                let offsetY: CGFloat = (bounds.height - extent.height * scale) / 2 + CGFloat(instruction.clip.offsetY) * bounds.height / 2
+                image = image.transformed(by: CGAffineTransform(translationX: offsetX, y: offsetY))
                 var frame = image.composited(over: CIImage(color: .black).cropped(to: bounds)).cropped(to: bounds)
                 let time = request.compositionTime.seconds
                 for caption in instruction.captions where time >= caption.start && time < caption.end {
@@ -71,8 +75,6 @@ final class GonaviCompositor: NSObject, AVVideoCompositing {
                 self.context.render(frame, to: output, bounds: bounds,
                                     colorSpace: CGColorSpace(name: CGColorSpace.sRGB)!)
                 request.finish(withComposedVideoFrame: output)
-            }
-        }
     }
 }
 
@@ -140,7 +142,7 @@ enum MediaEngine {
             try videoTrack.insertTimeRange(range, of: sourceVideo, at: cursor)
             if let sourceAudio = try await asset.loadTracks(withMediaType: .audio).first {
                 let available = try await sourceAudio.load(.timeRange)
-                let intersection = CMTimeRangeGetIntersection(range, available)
+                let intersection = CMTimeRangeGetIntersection(range, otherRange: available)
                 if intersection.duration > .zero {
                     let position = cursor + (intersection.start - range.start)
                     try soundTrack.insertTimeRange(intersection, of: sourceAudio, at: position)

@@ -99,13 +99,19 @@ struct EditorView: View {
         .background(dropTarget ? Theme.accent.opacity(0.1) : Theme.panel)
         .onDrop(of: [UTType.fileURL.identifier], isTargeted: $dropTarget) { providers in
             guard store.editable else { return false }
-            for provider in providers {
-                provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
-                    let url: URL?
-                    if let data = item as? Data { url = URL(dataRepresentation: data, relativeTo: nil) }
-                    else { url = item as? URL }
-                    if let url { Task { @MainActor in store.importURLs([url]) } }
+            Task { @MainActor in
+                var urls: [URL] = []
+                for provider in providers {
+                    let url: URL? = await withCheckedContinuation { continuation in
+                        provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
+                            if let data = item as? Data {
+                                continuation.resume(returning: URL(dataRepresentation: data, relativeTo: nil))
+                            } else { continuation.resume(returning: item as? URL) }
+                        }
+                    }
+                    if let url { urls.append(url) }
                 }
+                store.importURLs(urls)
             }
             return true
         }
