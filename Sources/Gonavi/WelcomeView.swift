@@ -139,7 +139,7 @@ struct WelcomeView: View {
             }.foregroundStyle(Theme.secondary)
             Divider().padding(.vertical, 24)
             Text("Size ait bir kurgu alanı.").font(.caption).foregroundStyle(Theme.ink)
-            Text("Hesap gerekmez.\nGonavi 0.2 · Teknik önizleme")
+            Text("Hesap gerekmez.\nGonavi 0.3 · Teknik önizleme")
                 .font(.system(size: 11)).foregroundStyle(Theme.secondary).lineSpacing(5).padding(.top, 7)
         }.padding(24).frame(maxHeight: .infinity, alignment: .top).background(Theme.panel)
     }

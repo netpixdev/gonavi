@@ -132,7 +132,7 @@ enum SmokeTest {
         try require(opener.recentProjects.isEmpty && FileManager.default.fileExists(atPath: directory.appendingPathComponent("smoke.gonavi").path), "Remove recent must preserve project file")
     }
 
-    @MainActor private static func snapshot<V: View>(_ root: V, size: CGSize, to url: URL) throws {
+    @MainActor static func snapshot<V: View>(_ root: V, size: CGSize, to url: URL) throws {
         let view = NSHostingView(rootView: root.preferredColorScheme(.dark).frame(width: size.width, height: size.height))
         let window = SnapshotWindow(contentRect: NSRect(origin: .zero, size: size),
                               styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
@@ -153,7 +153,7 @@ enum SmokeTest {
         window.orderOut(nil)
     }
 
-    private static func makeVideo(_ url: URL, red: CGFloat, green: CGFloat) async throws {
+    static func makeVideo(_ url: URL, red: CGFloat, green: CGFloat) async throws {
         let writer = try AVAssetWriter(outputURL: url, fileType: .mov)
         let input = AVAssetWriterInput(mediaType: .video, outputSettings: [AVVideoCodecKey: AVVideoCodecType.h264,
                                                                        AVVideoWidthKey: 320, AVVideoHeightKey: 180])

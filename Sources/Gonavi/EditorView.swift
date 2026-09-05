@@ -39,6 +39,7 @@ struct EditorView: View {
             }.font(.caption).foregroundStyle(Theme.secondary).padding(.horizontal, 16).frame(height: 28)
         }
         .background(Theme.canvas).tint(Theme.accent)
+        .sheet(isPresented: $store.showingAutoCaptions) { AutoCaptionView(store: store) }
         .sheet(isPresented: Binding(get: { store.exporting }, set: { _ in })) {
             VStack(alignment: .leading, spacing: 20) {
                 Text("Video hazırlanıyor").font(.title2.bold())
@@ -193,7 +194,7 @@ struct EditorView: View {
             } else { Text("Bir ses dosyası ekleyin. Müzik başlangıçtan çalar; video süresinde sonlanır.").font(.caption).foregroundStyle(Theme.secondary) }
             Divider()
             Text("İlk teknik sürüm").font(.headline)
-            Text("Tek video hattı, müzik ve elle altyazı. Otomatik altyazı, sessizlik temizleme ve çoklu video katmanları sonraki aşamada.")
+            Text("Tek video hattı, müzik, elle ve otomatik Türkçe altyazı. Sessizlik temizleme ve çoklu video katmanları sonraki aşamada.")
                 .font(.caption).foregroundStyle(Theme.secondary)
         }
     }
@@ -217,6 +218,9 @@ struct EditorView: View {
     private var captionInspector: some View {
         Group {
             HStack { Text("Altyazılar").font(.headline); Spacer(); Button(action: store.addCaption) { Image(systemName: "plus") }.disabled(store.project.clips.isEmpty) }
+            Button(action: store.automaticCaptions) { Label("Otomatik Altyazı…", systemImage: "captions.bubble") }
+                .buttonStyle(.borderedProminent).disabled(store.project.clips.isEmpty || !store.editable)
+            Text("Türkçe · ücretsiz · cihazda çalışır").font(.caption).foregroundStyle(Theme.secondary)
             ForEach(store.project.captions) { caption in
                 Button { store.selectedCaption = caption.id; store.seek(caption.start.seconds) } label: {
                     VStack(alignment: .leading, spacing: 4) {

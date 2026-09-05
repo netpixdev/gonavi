@@ -1,6 +1,6 @@
 # Gonavi
 
-SwiftUI tabanlı, yerel çalışan macOS video editörü. **0.2 teknik önizleme**; CapCut kapsamındaki tam ürün henüz tamamlanmadı.
+SwiftUI tabanlı, yerel çalışan macOS video editörü. **0.3 teknik önizleme**; CapCut kapsamındaki tam ürün henüz tamamlanmadı.
 
 ## İndir ve çalıştır
 
@@ -35,9 +35,18 @@ Editörün sol üstündeki çalışma alanı düğmesi başlangıca döner; aç�
 
 Timeline yakınlaştırma sağ üstteki kaydırıcıyla değişir. Klipler diğer klibin üzerine bırakılınca onun önüne taşınır. Bir klibi sona taşımak için son klibi onun önüne taşıyabilirsin; doğrudan boş alana bırakma henüz desteklenmez.
 
+## Ücretsiz otomatik Türkçe altyazı
+
+Editörde **Altyazı → Otomatik Altyazı** seç. Varsayılan **Dengeli** model (çok dilli Whisper Small Q5_1, 190 MB), Intel Mac için başlangıç seçimidir. **Daha yüksek doğruluk** (Medium Q5_0, 539 MB) zor konuşmalarda yardımcı olabilir; daha çok bellek ve işlem süresi ister. Bu seçim bir Türkçe doğruluk karşılaştırması sonucu değildir; fiziksel cihaz ve kendi videolarınla değerlendirilmelidir.
+
+İlk kullanımda **Modeli İndir ve Oluştur**, sonraki kullanımlarda **Altyazı Oluştur** de. Hesap, API anahtarı ve ücret gerekmez. Model bir kez Hugging Face üzerinden indirilir ve SHA-256 ile doğrulanır; videonun sesi cihazdan çıkmaz. Sonraki işlemler çevrimdışı çalışır. Modeller `~/Library/Application Support/Gonavi/Models` içinde tutulur; uygulama ZIP'ine dahil değildir.
+
+Ana video kliplerinin orijinal sesi kullanılır; ek müzik ve ses seviyesi efektleri dahil edilmez. İşlem ilerlemesi ve iptal vardır. Sonuç önce önizlenir, **Altyazıları Ekle / Mevcut Altyazıları Değiştir** ile uygulanır; tek `⌘Z` ile geri alınabilir. Altyazılar düzenlenebilir, SRT veya videoya gömülü olarak dışa aktarılabilir. [Motor ve model ayrıntıları](docs/AUTO-CAPTIONS.md).
+
 ## Sınırlar
 
-- Otomatik sessizlik temizleme, Whisper transkripsiyonu, kelime vurgulu animasyon, özel şablon içe aktarma, çoklu video katmanları, keyframe ve proxy henüz uygulanmadı. [Yol haritası](docs/ROADMAP.md).
+- Otomatik sessizlik temizleme, kelime vurgulu animasyon, özel şablon içe aktarma, çoklu video katmanları, keyframe ve proxy henüz uygulanmadı. [Yol haritası](docs/ROADMAP.md).
+- Otomatik altyazının yazım ve zaman kodları kontrol edilmelidir. Müzik, gürültü ve uzun sessizliklerde yanlış metin üretilebilir. Temel sessiz-ses kontrolü vardır; tam konuşma algılama/VAD henüz yoktur. Uzun klipler 5 dakikalık parçalara ayrılır; parça sınırındaki sözcükler düzeltme gerektirebilir. Apple Speech motoru henüz eklenmedi.
 - Kırpma bu aşamada böl + sil ile yapılır; kenardan sürükleyerek trim henüz yok.
 - `.gonavi` şu anda bir JSON dosyasıdır; medya dosyalarını içine kopyalayan taşınabilir paket henüz yok. Kaynak medya dosyalarını sakla.
 - Altyazılar timeline zamanına bağlıdır. Klip silme altyazıları kaydırır; klip sıralama altyazıları beraber taşımaz. Kaynak zamana bağlı altyazı modeli sonraki aşamadır.
@@ -49,13 +58,14 @@ Timeline yakınlaştırma sağ üstteki kaydırıcıyla değişir. Klipler diğe
 
 ## Geliştirme
 
-Bağımlılıksız Swift Package; macOS üzerinde Xcode 16.4 / Swift 6.1, Swift 5 dil modu.
+Swift Package; macOS üzerinde Xcode 16.4 / Swift 6.1, Swift 5 dil modu. Paketleme CMake ile sabitlenmiş whisper.cpp kaynağını derler; Intel CPU/Accelerate, Apple Silicon Metal/Accelerate kullanır. Python, Homebrew veya FFmpeg çalışma zamanı bağımlılığı yoktur. CMake yalnızca derleme sırasında gerekir.
 
 ```sh
 swift test
 bash scripts/build-app.sh
 open dist/Gonavi.app
 dist/Gonavi.app/Contents/MacOS/Gonavi --smoke-test dist/smoke
+bash scripts/test-captions.sh
 ```
 
 SwiftUI/AVFoundation uygulaması Windows'ta derlenmez. Windows'tan kaynak değiştirip GitHub'a push yap; macOS Actions derler. Projeyi bir Mac'te `Package.swift` üzerinden Xcode ile de açabilirsin.

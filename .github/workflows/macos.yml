@@ -22,7 +22,7 @@ jobs:
           - runner: macos-15-intel
             arch: x86_64
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 25
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
       - name: Select Xcode
@@ -33,10 +33,17 @@ jobs:
           test "$(uname -m)" = "${{ matrix.arch }}"
       - name: Core tests
         run: swift test --parallel
+      - name: Cache speech engine
+        uses: actions/cache@v4
+        with:
+          path: .build/whisper
+          key: whisper-${{ matrix.arch }}-${{ hashFiles('scripts/build-whisper.sh') }}-xcode16.4
       - name: Package and verify ad-hoc signature
         run: bash scripts/build-app.sh
       - name: Actual video export smoke test
         run: dist/Gonavi.app/Contents/MacOS/Gonavi --smoke-test dist/smoke
+      - name: Real automatic caption test
+        run: bash scripts/test-captions.sh
       - name: Upload application
         uses: actions/upload-artifact@v4
         with:

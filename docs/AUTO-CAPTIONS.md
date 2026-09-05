@@ -12,7 +12,20 @@ Wispr Flow/WhisperFlow uygulamasına veya ücretli bir transkripsiyon aboneliği
 2. **İsteğe bağlı Apple yolu:** uygun macOS sürümü, donanım, Türkçe locale ve yerel model desteği sorgulanır. Destek doğrulanmadan Apple motoru kullanılabilir gösterilmez.
 3. Sesin Apple sunucularına otomatik gönderildiği bir fallback olmayacak. Eski Speech API'sinin ağ modu ayrıca eklenirse kullanıcıya hedef ve kısıtlar açıklanır, kullanıcı seçimi gerekir.
 
-Bu belge mimari kararı günceller. 0.2 uygulamasına henüz otomatik transkripsiyon motoru eklenmemiştir; mevcut build'in otomatik altyazı ürettiği iddia edilmez.
+0.3 sürümü whisper.cpp tabanlı otomatik Türkçe altyazı hattını uygular. Apple motoru gelecek seçenek olarak kalır; mevcut arayüzde destekleniyor gibi gösterilmez.
+
+### Uygulanan varsayılan
+
+- Motor: whisper.cpp b4938, commit `371b5a7561823ab2bb32142d2751e35e7534727b`; yardımcı ikili uygulamaya eklenir ve ad-hoc imzalanır. Çalışma zamanında Python/FFmpeg gerekmez.
+- Dengeli: çok dilli `ggml-small-q5_1.bin`, 190.085.487 bayt. SHA-256 `ae85e4a935d7a567bd102fe55afc16bb595bdb618e11b2fc7591bc08120411bb`.
+- Daha yüksek doğruluk: çok dilli `ggml-medium-q5_0.bin`, 539.212.467 bayt. SHA-256 `19fea4b380c3a618ec4723c3eef2eb785ffba0d0538cf43f8f235e7b3b34220f`.
+- Model deposu sürümü: Hugging Face `ggerganov/whisper.cpp` revision `5359861c739e955e79d9a303bcbc70fb988958b1`. Boyut ve özet doğrulanmadan model kullanılmaz. Modeller ilk kullanımda ayrıca indirilir; indirildikten sonra ağ gerekmez.
+- Sabit Türkçe transkripsiyon (`-l tr`, çeviri kapalı). Beş dakikaya kadar kaynak ses parçaları, 16 kHz mono PCM WAV. Trim ve gecikmiş ses başlangıcı korunur. Ek müzik dahil edilmez.
+- CLI kelime sınırlarında kısa segmentler üretir; segment zamanları projeye taşınır. Sonuç önizlenir; bütün mevcut altyazıları değiştirme açık bir eylemdir ve tek adımda geri alınır. Hata ve iptal projeye kısmi sonuç yazmaz.
+
+Small seçimi Intel için boyut/bellek/doğruluk dengesi kararıdır; her Türkçe kayıt için en iyi doğruluğu verdiği iddia edilmez. Medium daha yavaş olabilir. Gerçek Türkçe kullanıcı videolarında WER/CER ve Intel işlem süresi henüz ölçülmemiştir. CI'da gerçek motorla İngilizce ses ve sistemde varsa sentetik Türkçe ses entegrasyon testleri çalışır; bunlar insan konuşması doğruluk karşılaştırması değildir.
+
+Henüz olmayanlar: VAD, kelime vurgusu, güven skoru arayüzü, altyazıyı sonraki klip sıralamasıyla birlikte taşıma ve kesintili indirmeye kaldığı yerden devam. Bozuk model arayüzden kaldırılıp yeniden indirilebilir. Beş dakikalık parça sınırlarında konuşma bağlamı kesilebilir.
 
 ## Apple Dikte ile API arasındaki fark
 

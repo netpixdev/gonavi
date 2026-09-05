@@ -21,6 +21,7 @@ final class EditorStore: ObservableObject {
     @Published var revision = 0
     @Published var showingHome = true
     @Published var creatingProject = false
+    @Published var showingAutoCaptions = false
     @Published private(set) var hasOpenProject = false
     @Published private(set) var recoveryAvailable = false
     @Published private(set) var recentProjects: [RecentProject] = []
@@ -41,7 +42,7 @@ final class EditorStore: ObservableObject {
     var canUndo: Bool { !undoStack.isEmpty }
     var canRedo: Bool { !redoStack.isEmpty }
     var activeClip: VideoClip? { project.clips.first { $0.id == selectedClip } }
-    var editable: Bool { !importing && !exporting }
+    var editable: Bool { !importing && !exporting && !showingAutoCaptions }
     var canExport: Bool { !project.clips.isEmpty && prepared != nil && !isBuilding && editable }
 
     init(storageDirectory: URL? = nil) {
@@ -107,7 +108,7 @@ final class EditorStore: ObservableObject {
         } catch { self.error = "Otomatik kayıt başarısız: \(error.localizedDescription)" }
     }
     func confirmDiscard() -> Bool {
-        guard !exporting && !importing else { return false }
+        guard editable else { return false }
         guard dirty else { return true }
         let alert = NSAlert()
         alert.messageText = "Projedeki değişiklikler kaydedilsin mi?"
@@ -310,6 +311,17 @@ final class EditorStore: ObservableObject {
         let start = EditTime(seconds: min(playhead, max(0, project.duration.seconds - 1)))
         let caption = Caption(start: start, duration: min(EditTime(seconds: 3), project.duration - start), text: "Altyazınızı yazın")
         mutate { $0.captions.append(caption) }; selectedCaption = caption.id
+    }
+    func automaticCaptions() {
+        guard editable, !project.clips.isEmpty else { return }
+        player.pause(); isPlaying = false; showingHome = false; showingAutoCaptions = true
+    }
+    func applyGeneratedCaptions(_ captions: [Caption]) {
+        guard showingAutoCaptions, !captions.isEmpty else { return }
+        showingAutoCaptions = false
+        mutate { $0.captions = captions }
+        selectedCaption = project.captions.first?.id
+        status = "\(project.captions.count) otomatik altyazı eklendi. Metinleri kontrol edip düzenleyebilirsiniz."
     }
     func exportSRT() {
         let panel = NSSavePanel(); panel.nameFieldStringValue = project.name + ".srt"
