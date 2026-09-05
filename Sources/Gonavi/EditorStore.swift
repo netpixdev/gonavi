@@ -23,6 +23,8 @@ final class EditorStore: ObservableObject {
     private var fileURL: URL?
     private var undoStack: [Project] = []
     private var redoStack: [Project] = []
+    private var continuousEdit = false
+    private var continuousRecorded = false
     private var buildTask: Task<Void, Never>?
     private var prepared: PreparedTimeline?
     private var exportSession: AVAssetExportSession?
@@ -59,11 +61,17 @@ final class EditorStore: ObservableObject {
         do {
             try action(&next); try next.validate()
             guard next != project else { return }
-            undoStack.append(project)
-            if undoStack.count > 100 { undoStack.removeFirst() }
+            if !continuousEdit || !continuousRecorded {
+                undoStack.append(project)
+                if undoStack.count > 100 { undoStack.removeFirst() }
+                continuousRecorded = true
+            }
             redoStack.removeAll(); project = next; dirty = true; revision += 1
             autosave(); rebuild()
         } catch { self.error = error.localizedDescription }
+    }
+    func sliderEditing(_ active: Bool) {
+        continuousEdit = active; continuousRecorded = false
     }
     func updateClip(_ action: (inout VideoClip) -> Void) {
         guard let id = selectedClip else { return }

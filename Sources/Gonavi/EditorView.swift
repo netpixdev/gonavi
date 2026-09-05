@@ -218,8 +218,8 @@ struct EditorView: View {
                 }.buttonStyle(.plain)
             }
             if let caption = store.project.captions.first(where: { $0.id == store.selectedCaption }) {
-                TextField("Altyazı", text: Binding(get: { store.project.captions.first { $0.id == store.selectedCaption }?.text ?? "" }, set: { value in store.updateCaption { $0.text = value } }), axis: .vertical)
-                    .lineLimit(2...6)
+                CaptionTextEditor(text: caption.text) { value in store.updateCaption { $0.text = value } }
+                    .id(caption.id)
                 Picker("Şablon", selection: Binding(get: { caption.style }, set: { value in store.updateCaption { $0.style = value } })) {
                     ForEach(CaptionStyle.allCases, id: \.self) { Text($0.rawValue).tag($0) }
                 }
@@ -311,7 +311,7 @@ struct EditorView: View {
     private func valueSlider(_ label: String, value: Binding<Double>, range: ClosedRange<Double>) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack { Text(label); Spacer(); Text(value.wrappedValue, format: .number.precision(.fractionLength(2))).monospacedDigit().foregroundStyle(Theme.secondary) }.font(.caption)
-            Slider(value: value, in: range).accessibilityLabel(label)
+            Slider(value: value, in: range, onEditingChanged: store.sliderEditing).accessibilityLabel(label)
         }
     }
     private func panelTitle(_ title: String, trailing: String) -> some View {
@@ -321,5 +321,22 @@ struct EditorView: View {
     private func clock(_ seconds: Double) -> String {
         let total = max(0, Int(seconds * 100))
         return String(format: "%02d:%02d.%02d", total / 6000, total / 100 % 60, total % 100)
+    }
+}
+
+private struct CaptionTextEditor: View {
+    let text: String
+    let apply: (String) -> Void
+    @State private var draft: String = ""
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            TextField("Altyazı", text: $draft, axis: .vertical).lineLimit(2...6)
+            HStack {
+                Text("\(draft.count)/500").font(.caption2).foregroundStyle(Theme.secondary)
+                Spacer()
+                Button("Metni Uygula") { apply(draft) }
+                    .disabled(draft == text || draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || draft.count > 500)
+            }
+        }.onAppear { draft = text }.onChange(of: text) { _, newText in draft = newText }
     }
 }

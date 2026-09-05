@@ -1,6 +1,7 @@
 import AppKit
 import AVFoundation
 import GonaviCore
+import SwiftUI
 
 enum SmokeTest {
     static func require(_ condition: Bool, _ message: String) throws {
@@ -40,6 +41,8 @@ enum SmokeTest {
         try require(abs(duration.seconds - 4) < 1.0 / 30.0, "Export duration drift")
         let audio = try await asset.loadTracks(withMediaType: .audio)
         try require(audio.count == 1, "Missing mixed audio")
+        let rms = try audioRMS(asset: asset, track: audio[0])
+        try require(rms > 0.005 && rms < 0.04, "Mixed audio is silent or gain is incorrect: \(rms)")
         let video = try await asset.loadTracks(withMediaType: .video)
         let size = try await video[0].load(.naturalSize)
         try require(size == CGSize(width: 1920, height: 1080), "Wrong export resolution")
@@ -55,8 +58,52 @@ enum SmokeTest {
         let png = NSBitmapImageRep(cgImage: frame1)
         try png.representation(using: .png, properties: [:])?.write(to: directory.appendingPathComponent("caption-frame.png"))
         try project.srt().write(to: directory.appendingPathComponent("captions.srt"), atomically: true, encoding: .utf8)
-        let report = "PASS: project round-trip, 4s export, 1920×1080, two ordered clips, audio track, caption visibility and timing.\n"
+        try await snapshotUI(directory: directory)
+        let report = "PASS: project round-trip, 4s export, 1920×1080, two ordered clips, audio RMS \(rms), caption visibility and timing. UI snapshot generated for visual inspection.\n"
         try report.write(to: directory.appendingPathComponent("report.txt"), atomically: true, encoding: .utf8)
+    }
+
+    private static func audioRMS(asset: AVAsset, track: AVAssetTrack) throws -> Double {
+        let reader = try AVAssetReader(asset: asset)
+        let output = AVAssetReaderTrackOutput(track: track, outputSettings: [
+            AVFormatIDKey: kAudioFormatLinearPCM,
+            AVLinearPCMIsFloatKey: true,
+            AVLinearPCMBitDepthKey: 32,
+            AVLinearPCMIsNonInterleaved: false])
+        reader.add(output)
+        try require(reader.startReading(), "Audio reader failed")
+        var sum: Double = 0, count = 0
+        while let sample = output.copyNextSampleBuffer() {
+            guard let block = CMSampleBufferGetDataBuffer(sample) else { continue }
+            let length = CMBlockBufferGetDataLength(block)
+            var bytes = [Float](repeating: 0, count: length / MemoryLayout<Float>.size)
+            let result = bytes.withUnsafeMutableBytes { data in
+                CMBlockBufferCopyDataBytes(block, atOffset: 0, dataLength: length, destination: data.baseAddress!)
+            }
+            try require(result == kCMBlockBufferNoErr, "Audio PCM copy failed")
+            for value in bytes { sum += Double(value * value); count += 1 }
+        }
+        try require(reader.status == .completed && count > 0, "Audio decode incomplete")
+        return sqrt(sum / Double(count))
+    }
+
+    @MainActor private static func snapshotUI(directory: URL) throws {
+        _ = NSApplication.shared
+        let store = EditorStore()
+        let view = NSHostingView(rootView: EditorView(store: store).preferredColorScheme(.dark))
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1440, height: 900),
+                              styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
+        window.contentView = view
+        window.appearance = NSAppearance(named: .darkAqua)
+        view.frame = NSRect(x: 0, y: 0, width: 1440, height: 900)
+        window.orderFront(nil)
+        view.layoutSubtreeIfNeeded(); view.display()
+        guard let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) else {
+            throw ProjectError.invalid("UI bitmap creation failed")
+        }
+        view.cacheDisplay(in: view.bounds, to: bitmap)
+        try bitmap.representation(using: .png, properties: [:])?.write(to: directory.appendingPathComponent("editor-empty.png"))
+        window.orderOut(nil)
     }
 
     private static func makeVideo(_ url: URL, red: CGFloat, green: CGFloat) async throws {
