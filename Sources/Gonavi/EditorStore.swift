@@ -238,7 +238,7 @@ final class EditorStore: ObservableObject {
         guard panel.runModal() == .OK else { return }
         importURLs(panel.urls)
     }
-    func importURLs(_ urls: [URL], at dropTime: Double? = nil) {
+    func importURLs(_ urls: [URL], at dropTime: Double? = nil, snap: Bool = true) {
         guard editable, !urls.isEmpty else { return }
         importing = true; status = "Medya okunuyor…"
         Task {
@@ -253,7 +253,7 @@ final class EditorStore: ObservableObject {
                 var position = dropTime
                 for source in imported {
                     let registered = p.sources.first(where: { $0.path == source.path }) ?? source
-                    let target = position.map { self.snappedTime($0, duration: registered.duration.seconds, in: p).time }
+                    let target = position.map { self.snappedTime($0, duration: registered.duration.seconds, in: p, bypass: !snap).time }
                     let id = p.appendSourceToTimeline(source: registered, at: target.map(EditTime.init(seconds:)))
                     if position != nil { position = p.start(of: id).seconds + registered.duration.seconds }
                 }

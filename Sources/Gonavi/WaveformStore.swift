@@ -99,7 +99,7 @@ final class WaveformStore: ObservableObject {
 
 enum WaveformDecoder {
     private static let sampleRate = 16_000
-    private static let cacheVersion = 1
+    private static let cacheVersion = 2
     private static let maximumCacheFileSize = 192 * 1024 * 1024
     private static let cacheBudget = 256 * 1024 * 1024
     private struct CachedWaveform: Codable {
@@ -124,12 +124,15 @@ enum WaveformDecoder {
             return .noAudio
         }
         let duration = try await asset.load(.duration).seconds
+        let descriptions = try await track.load(.formatDescriptions)
+        let channels = descriptions.first.flatMap { CMAudioFormatDescriptionGetStreamBasicDescription($0)?.pointee.mChannelsPerFrame }.map(Int.init) ?? 1
+        guard (1...32).contains(channels) else { throw ProjectError.invalid("Ses kanal sayısı desteklenmiyor.") }
         var accumulator = try AudioPeakAccumulator(duration: duration, sampleRate: sampleRate)
         let reader = try AVAssetReader(asset: asset)
         let output = AVAssetReaderTrackOutput(track: track, outputSettings: [
             AVFormatIDKey: kAudioFormatLinearPCM,
             AVSampleRateKey: sampleRate,
-            AVNumberOfChannelsKey: 1,
+            AVNumberOfChannelsKey: channels,
             AVLinearPCMBitDepthKey: 32,
             AVLinearPCMIsFloatKey: true,
             AVLinearPCMIsBigEndianKey: false,
@@ -158,7 +161,7 @@ enum WaveformDecoder {
                 }
                 guard code == kCMBlockBufferNoErr else { throw ProjectError.invalid("Ses örnekleri okunamadı.") }
                 let timestamp = CMSampleBufferGetPresentationTimeStamp(sample).seconds
-                try samples.withUnsafeBufferPointer { try accumulator.append($0, at: timestamp) }
+                try samples.withUnsafeBufferPointer { try accumulator.append($0, at: timestamp, channels: channels) }
                 return true
             }
             if !readSample { break }

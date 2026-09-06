@@ -311,7 +311,7 @@ private struct TimelineSurface: NSViewRepresentable {
     }
     private func sourceID(_ sender: NSDraggingInfo) -> UUID? {
         let pasteboard = sender.draggingPasteboard
-        let value = pasteboard.string(forType: Self.libraryType) ?? pasteboard.string(forType: .string)
+        let value = pasteboard.data(forType: Self.libraryType).flatMap { String(data: $0, encoding: .utf8) } ?? pasteboard.string(forType: .string)
         guard let value, value.hasPrefix("gonavi-media:") else { return nil }
         return UUID(uuidString: String(value.dropFirst(13)))
     }
@@ -329,7 +329,8 @@ private struct TimelineSurface: NSViewRepresentable {
             // Duration is known after inspection; show an insertion guide until then.
             guide = TimelineGeometry.snap(proposedStart: time(currentPoint.x), duration: 0,
                 candidates: layoutClips.flatMap { [$0.1, $0.1 + $0.0.duration.seconds] } + [store.playhead],
-                pixelsPerSecond: store.timeline.pixelsPerSecond, fps: store.project.fps, enabled: store.timeline.snapping).time
+                pixelsPerSecond: store.timeline.pixelsPerSecond, fps: store.project.fps,
+                enabled: store.timeline.snapping && !NSEvent.modifierFlags.contains(.option)).time
         } else { return [] }
         startEdgeTimer(); needsDisplay = true; return .copy
     }
@@ -343,7 +344,7 @@ private struct TimelineSurface: NSViewRepresentable {
         }
         let urls = sender.draggingPasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
         guard !urls.isEmpty else { return false }
-        store.importURLs(urls, at: time(currentPoint.x)); return true
+        store.importURLs(urls, at: time(currentPoint.x), snap: !NSEvent.modifierFlags.contains(.option)); return true
     }
     override func draggingExited(_ sender: NSDraggingInfo?) { clearDrag() }
     override func draggingEnded(_ sender: NSDraggingInfo) { clearDrag() }

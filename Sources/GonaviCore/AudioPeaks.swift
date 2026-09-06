@@ -27,9 +27,14 @@ public struct WaveformData: Codable, Sendable {
         guard bucketDuration.isFinite, bucketDuration >= 0.001, bucketDuration <= 1,
               duration.isFinite, duration > 0, duration <= 86_400,
               peaks.count == rms.count, peaks.count == Int(ceil(duration / bucketDuration)),
-              peaks.count <= 8_640_000,
-              zip(peaks, rms).allSatisfy({ $0.isFinite && $1.isFinite && $0 >= 0 && $0 <= 1 && $1 >= 0 && $1 <= $0 + 0.00001 }) else {
+              peaks.count <= 8_640_000 else {
             throw ProjectError.invalid("Dalga formu verisi geçersiz.")
+        }
+        for index in peaks.indices {
+            let peak = peaks[index], level = rms[index]
+            guard peak.isFinite, level.isFinite, peak >= 0, peak <= 1, level >= 0, level <= peak + Float(0.00001) else {
+                throw ProjectError.invalid("Dalga formu seviyesi geçersiz.")
+            }
         }
         self.bucketDuration = bucketDuration; self.duration = duration
         self.peaks = peaks; self.rms = rms
@@ -139,14 +144,15 @@ public struct AudioPeakAccumulator {
         peaks = Array(repeating: 0, count: count); rms = Array(repeating: 0, count: count)
     }
 
-    public mutating func append(_ samples: UnsafeBufferPointer<Float>, at timestamp: Double) throws {
-        guard timestamp.isFinite, abs(timestamp) <= 172_800 else {
+    public mutating func append(_ samples: UnsafeBufferPointer<Float>, at timestamp: Double, channels: Int = 1) throws {
+        guard timestamp.isFinite, abs(timestamp) <= 172_800, (1...32).contains(channels), samples.count % channels == 0 else {
             throw ProjectError.invalid("Ses zaman kodu geçersiz.")
         }
         let startFrame = Int((timestamp * Double(sampleRate)).rounded())
         let skip = max(0, nextFrame - startFrame)
-        guard skip < samples.count else { return }
-        for offset in skip..<samples.count {
+        let frameCount = samples.count / channels
+        guard skip < frameCount else { return }
+        for offset in skip..<frameCount {
             let frame = startFrame + offset
             if frame < 0 { continue }
             if frame >= totalFrames { break }
@@ -156,10 +162,14 @@ public struct AudioPeakAccumulator {
                 finishCurrentBucket(); currentBucket = bucket
                 currentPeak = 0; currentEnergy = 0
             }
-            let sample = samples[offset]
-            let amplitude = sample.isFinite ? min(1, abs(sample)) : 0
-            currentPeak = max(currentPeak, amplitude)
-            currentEnergy += Double(amplitude) * Double(amplitude)
+            var energy = 0.0
+            for channel in 0..<channels {
+                let sample = samples[offset * channels + channel]
+                let amplitude = sample.isFinite ? min(1, abs(sample)) : 0
+                currentPeak = max(currentPeak, amplitude)
+                energy += Double(amplitude) * Double(amplitude)
+            }
+            currentEnergy += energy / Double(channels)
             nextFrame = frame + 1
         }
     }

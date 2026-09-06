@@ -2,6 +2,14 @@ import XCTest
 @testable import GonaviCore
 
 final class AudioPeaksTests: XCTestCase {
+    func testOppositeStereoChannelsCannotLookSilent() throws {
+        var accumulator = try AudioPeakAccumulator(duration: 1, sampleRate: 100, bucketsPerSecond: 10)
+        let samples = (0..<100).flatMap { _ in [Float(0.8), Float(-0.8)] }
+        try samples.withUnsafeBufferPointer { try accumulator.append($0, at: 0, channels: 2) }
+        let waveform = try accumulator.finish()
+        XCTAssertEqual(waveform.level(in: 0..<1).peak, 0.8, accuracy: 0.001)
+        XCTAssertEqual(waveform.level(in: 0..<1).rms, 0.8, accuracy: 0.001)
+    }
     func testSilenceQuietAndLoudRetainSharedScale() throws {
         var accumulator = try AudioPeakAccumulator(duration: 3, sampleRate: 100, bucketsPerSecond: 10)
         let samples = Array(repeating: Float(0), count: 100) + Array(repeating: Float(0.05), count: 100) + Array(repeating: Float(-0.8), count: 100)
