@@ -28,15 +28,20 @@ enum SilenceSmokeTest {
         store.automaticSilences()
         let controller = SilenceController(hasSelection: true)
         controller.onlySelected = false
-        try SmokeTest.snapshot(SilenceView(store: store, controller: controller), size: CGSize(width: 740, height: 510),
+        let settingsController = SilenceController(hasSelection: true)
+        settingsController.onlySelected = false
+        try SmokeTest.snapshot(SilenceView(store: store, controller: settingsController), size: CGSize(width: 740, height: 510),
                                to: directory.appendingPathComponent("silence-settings.png"))
+        // Snapshot teardown delivers SwiftUI onDisappear on the next run-loop turn.
+        // Let it finish before starting an analysis or audition on another view.
+        try await Task.sleep(nanoseconds: 150_000_000)
         controller.generate(store: store)
         for _ in 0..<3000 {
             if !controller.working { break }
             try await Task.sleep(nanoseconds: 20_000_000)
         }
         try SmokeTest.require(!controller.working && controller.failure == nil, controller.failure ?? "Silence analysis timeout")
-        guard let result = controller.result else { throw ProjectError.invalid("Silence review missing") }
+        guard let result = controller.result else { throw ProjectError.invalid("Silence review missing: \(controller.message)") }
         try SmokeTest.require(result.candidates.count == 4, "Expected four source silence regions, got \(result.candidates.count)")
         try SmokeTest.require(result.skippedSources.count == 1, "Video without audio must be skipped")
         try SmokeTest.require(store.project == original && store.revision == originalRevision, "Analysis mutated project before approval")
@@ -45,6 +50,7 @@ enum SilenceSmokeTest {
         }
         try SmokeTest.snapshot(SilenceView(store: store, controller: controller), size: CGSize(width: 740, height: 640),
                                to: directory.appendingPathComponent("silence-review.png"))
+        try await Task.sleep(nanoseconds: 150_000_000)
 
         // A short audition automatically stops and leaves the project unchanged.
         let audition = result.candidates[1]
