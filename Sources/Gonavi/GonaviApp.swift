@@ -31,7 +31,7 @@ struct GonaviApp: App {
             CommandGroup(replacing: .saveItem) {
                 Button("Kaydet") { store.save() }.keyboardShortcut("s").disabled(!store.hasOpenProject)
                 Button("Farklı Kaydet…") { store.save(asNew: true) }.keyboardShortcut("s", modifiers: [.command, .shift]).disabled(!store.hasOpenProject)
-                Button("Video Dışa Aktar…", action: store.exportVideo).keyboardShortcut("e").disabled(!store.canExport)
+                Button("Dışa Aktar…", action: store.exportVideo).keyboardShortcut("e").disabled(!store.canExport)
             }
             CommandGroup(replacing: .undoRedo) {
                 Button("Geri Al", action: store.undo).keyboardShortcut("z").disabled(!store.canUndo || !store.editable)

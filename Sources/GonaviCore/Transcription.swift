@@ -9,7 +9,7 @@ public enum WhisperTranscript {
     public static func captions(from data: Data, offset: EditTime = .zero,
                                 limit: EditTime, style: CaptionStyle = .clean) throws -> [Caption] {
         guard data.count <= 32_000_000, offset >= .zero, limit > .zero,
-              offset.seconds + limit.seconds <= 86_400 else {
+              limit.seconds <= 86_400, offset.ticks <= Int64.max - limit.ticks else {
             throw ProjectError.invalid("Altyazı zaman aralığı geçersiz.")
         }
         let document: Document

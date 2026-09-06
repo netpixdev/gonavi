@@ -91,6 +91,7 @@ enum CaptionEngine {
         defer { try? FileManager.default.removeItem(at: folder) }
         var result: [Caption] = [], timeline = EditTime.zero
         for (index, clip) in project.clips.enumerated() {
+            timeline = project.start(of: clip.id)
             guard let source = project.sources.first(where: { $0.id == clip.sourceID }) else {
                 throw ProjectError.invalid("Konuşma için kaynak video bulunamadı.")
             }

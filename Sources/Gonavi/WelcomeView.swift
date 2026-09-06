@@ -52,7 +52,7 @@ struct WelcomeView: View {
                             Text("Bir sonraki\nhikâyeniz.")
                                 .font(.system(size: 42, weight: .semibold, design: .rounded)).tracking(-1.2)
                                 .fixedSize(horizontal: false, vertical: true)
-                            Text("Görüntülerinizi bir araya getirin.\nKurgulayın, altyazı ekleyin, paylaşmaya hazırlayın.")
+                            Text("Görüntü ve seslerinizi bir araya getirin.\nKurgulayın, altyazı ekleyin, paylaşmaya hazırlayın.")
                                 .font(.system(size: 14)).foregroundStyle(Theme.secondary).lineSpacing(5)
                         }
                         Spacer(minLength: 0)
@@ -139,7 +139,7 @@ struct WelcomeView: View {
             }.foregroundStyle(Theme.secondary)
             Divider().padding(.vertical, 24)
             Text("Size ait bir kurgu alanı.").font(.caption).foregroundStyle(Theme.ink)
-            Text("Hesap gerekmez.\nGonavi 0.3 · Teknik önizleme")
+            Text("Hesap gerekmez.\nGonavi 0.4 · Teknik önizleme")
                 .font(.system(size: 11)).foregroundStyle(Theme.secondary).lineSpacing(5).padding(.top, 7)
         }.padding(24).frame(maxHeight: .infinity, alignment: .top).background(Theme.panel)
     }
@@ -262,10 +262,10 @@ struct NewProjectView: View {
             }
             Divider()
             HStack {
-                Text("Videoları bir sonraki adımda ekleyin.").font(.caption).foregroundStyle(Theme.secondary)
+                Text("Video ve sesleri sonraki adımda ekleyin.").font(.caption).foregroundStyle(Theme.secondary)
                 Spacer()
                 Button("Projeyi oluştur") { store.createProject(name: name, scene: scene, fps: fps) }
-                    .buttonStyle(.borderedProminent).tint(Theme.accent).foregroundStyle(Theme.onAccent)
+                    .buttonStyle(StudioButtonStyle(primary: true))
                     .controlSize(.large).keyboardShortcut(.defaultAction)
                     .disabled(name.count > 120)
             }

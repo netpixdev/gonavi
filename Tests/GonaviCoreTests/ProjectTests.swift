@@ -44,7 +44,7 @@ final class ProjectTests: XCTestCase {
         XCTAssertEqual(try Project.decode(p.encoded()), p)
     }
     func testRejectsFutureSchemaAndInvalidRange() throws {
-        var p = fixture(); p.schemaVersion = 2
+        var p = fixture(); p.schemaVersion = 3
         XCTAssertThrowsError(try p.encoded())
         p.schemaVersion = 1; p.clips[0].sourceStart = .init(seconds: 9)
         XCTAssertThrowsError(try p.validate())

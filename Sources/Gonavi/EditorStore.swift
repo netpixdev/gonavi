@@ -26,6 +26,8 @@ final class EditorStore: ObservableObject {
     @Published private(set) var recoveryAvailable = false
     @Published private(set) var recentProjects: [RecentProject] = []
     let player = AVPlayer()
+    let waveforms = WaveformStore()
+    let timeline = TimelineViewport()
     private var fileURL: URL?
     private var undoStack: [Project] = []
     private var redoStack: [Project] = []
@@ -43,7 +45,8 @@ final class EditorStore: ObservableObject {
     var canRedo: Bool { !redoStack.isEmpty }
     var activeClip: VideoClip? { project.clips.first { $0.id == selectedClip } }
     var editable: Bool { !importing && !exporting && !showingAutoCaptions }
-    var canExport: Bool { !project.clips.isEmpty && prepared != nil && !isBuilding && editable }
+    var hasVideo: Bool { project.clips.contains { clip in project.sources.contains { $0.id == clip.sourceID && $0.isVideo } } }
+    var canExport: Bool { project.duration > .zero && prepared != nil && !isBuilding && editable }
 
     init(storageDirectory: URL? = nil) {
         let directory = storageDirectory ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -71,7 +74,7 @@ final class EditorStore: ObservableObject {
         guard editable else { return }
         var next = project
         do {
-            try action(&next); try next.validate()
+            try action(&next); next.normalizeTimeline(); try next.validate()
             guard next != project else { return }
             if !continuousEdit || !continuousRecorded {
                 undoStack.append(project)
@@ -193,6 +196,7 @@ final class EditorStore: ObservableObject {
     private func resetHistory() {
         undoStack.removeAll(); redoStack.removeAll(); revision += 1
         selectedClip = project.clips.first?.id; selectedCaption = nil; playhead = 0
+        timeline.offset = 0; waveforms.cancelAll()
     }
     func open() {
         guard editable else { return }
@@ -234,7 +238,7 @@ final class EditorStore: ObservableObject {
         guard panel.runModal() == .OK else { return }
         importURLs(panel.urls)
     }
-    func importURLs(_ urls: [URL]) {
+    func importURLs(_ urls: [URL], at dropTime: Double? = nil) {
         guard editable, !urls.isEmpty else { return }
         importing = true; status = "Medya okunuyor…"
         Task {
@@ -246,10 +250,12 @@ final class EditorStore: ObservableObject {
             }
             importing = false
             mutate { p in
-                for source in imported where !p.sources.contains(where: { $0.path == source.path }) {
-                    p.sources.append(source)
-                    if source.isVideo { p.clips.append(VideoClip(sourceID: source.id, duration: source.duration)) }
-                    else { p.music = MusicClip(sourceID: source.id) }
+                var position = dropTime
+                for source in imported {
+                    let registered = p.sources.first(where: { $0.path == source.path }) ?? source
+                    let target = position.map { self.snappedTime($0, duration: registered.duration.seconds, in: p).time }
+                    let id = p.appendSourceToTimeline(source: registered, at: target.map(EditTime.init(seconds:)))
+                    if position != nil { position = p.start(of: id).seconds + registered.duration.seconds }
                 }
             }
             if selectedClip == nil { selectedClip = project.clips.first?.id }
@@ -257,11 +263,13 @@ final class EditorStore: ObservableObject {
             if !failures.isEmpty { error = failures.joined(separator: "\n") }
         }
     }
-    func addSource(_ source: MediaSource) {
-        mutate { p in
-            if source.isVideo { p.clips.append(VideoClip(sourceID: source.id, duration: source.duration)) }
-            else { p.music = MusicClip(sourceID: source.id) }
-        }
+    func addSource(_ source: MediaSource, at time: Double? = nil) {
+        var id: UUID?
+        mutate { p in id = p.appendSourceToTimeline(source: source, at: time.map(EditTime.init(seconds:))) }
+        selectedClip = id
+    }
+    func addMusic(_ source: MediaSource) {
+        mutate { $0.music = MusicClip(sourceID: source.id) }
     }
     func relink(_ source: MediaSource) {
         guard editable else { return }
@@ -274,10 +282,12 @@ final class EditorStore: ObservableObject {
                 guard replacement.isVideo == source.isVideo else { throw ProjectError.invalid("Medya türü eşleşmiyor.") }
                 replacement.id = source.id; importing = false
                 mutate { p in if let index = p.sources.firstIndex(where: { $0.id == source.id }) { p.sources[index] = replacement } }
+                waveforms.invalidate(source.id)
             } catch { importing = false; self.error = error.localizedDescription }
         }
     }
     func seek(_ seconds: Double) {
+        guard seconds.isFinite else { return }
         let time = max(0, min(seconds, project.duration.seconds))
         playhead = time
         player.seek(to: CMTime(seconds: time, preferredTimescale: 60000), toleranceBefore: .zero, toleranceAfter: .zero)
@@ -298,13 +308,25 @@ final class EditorStore: ObservableObject {
         mutate { $0.remove(id) }; selectedClip = project.clips.first?.id
     }
     func moveClip(_ id: UUID, before target: UUID) {
-        guard id != target else { return }
-        mutate { p in
-            guard let source = p.clips.firstIndex(where: { $0.id == id }) else { return }
-            let clip = p.clips.remove(at: source)
-            guard let destination = p.clips.firstIndex(where: { $0.id == target }) else { return }
-            p.clips.insert(clip, at: destination)
+        moveClip(id, to: project.start(of: target).seconds)
+    }
+    func moveClip(_ id: UUID, to seconds: Double) {
+        mutate { _ = $0.placeClip(id: id, at: EditTime(seconds: seconds)) }
+        selectedClip = id
+    }
+    func snappedTime(_ proposed: Double, duration: Double, excluding: UUID? = nil, in snapshot: Project? = nil,
+                     bypass: Bool = false) -> SnapResult {
+        let p = snapshot ?? project
+        var targets = [0.0, playhead]
+        for clip in p.clips where clip.id != excluding {
+            let start = p.start(of: clip.id).seconds
+            targets += [start, start + clip.duration.seconds]
         }
+        let snapped = TimelineGeometry.snap(proposedStart: proposed, duration: duration, candidates: targets,
+                                             pixelsPerSecond: timeline.pixelsPerSecond, fps: p.fps,
+                                             enabled: timeline.snapping && !bypass)
+        let resolved = p.resolvedPlacement(at: EditTime(seconds: snapped.time), duration: EditTime(seconds: duration), excluding: excluding).seconds
+        return SnapResult(time: resolved, guide: abs(resolved - snapped.time) < 0.0001 ? snapped.guide : nil)
     }
     func addCaption() {
         guard project.duration.ticks > 0 else { return }
@@ -330,9 +352,10 @@ final class EditorStore: ObservableObject {
         catch { self.error = error.localizedDescription }
     }
     func rebuild() {
+        waveforms.load(project.sources)
         buildTask?.cancel(); player.pause(); isPlaying = false; prepared = nil
         playerStatusObserver = nil; player.replaceCurrentItem(with: nil)
-        if project.clips.isEmpty { isBuilding = false; playhead = 0; return }
+        if project.duration == .zero { isBuilding = false; playhead = 0; return }
         isBuilding = true
         let snapshot = project, position = min(playhead, project.duration.seconds)
         buildTask = Task {
@@ -355,15 +378,18 @@ final class EditorStore: ObservableObject {
     }
     func exportVideo() {
         guard canExport, let prepared else { return }
-        let panel = NSSavePanel(); panel.allowedContentTypes = [.mpeg4Movie]
-        panel.nameFieldStringValue = project.name + ".mp4"
+        let audioOnly = !hasVideo
+        let fileType: AVFileType = audioOnly ? .m4a : .mp4
+        let ext = audioOnly ? "m4a" : "mp4"
+        let panel = NSSavePanel(); panel.allowedContentTypes = [audioOnly ? .mpeg4Audio : .mpeg4Movie]
+        panel.nameFieldStringValue = project.name + "." + ext
         guard panel.runModal() == .OK, let destination = panel.url else { return }
         // Export to a sibling temporary file; an existing destination survives failure/cancellation.
-        let temporary = destination.deletingLastPathComponent().appendingPathComponent(".gonavi-\(UUID().uuidString).mp4")
-        guard let session = AVAssetExportSession(asset: prepared.composition, presetName: AVAssetExportPresetHighestQuality) else {
+        let temporary = destination.deletingLastPathComponent().appendingPathComponent(".gonavi-\(UUID().uuidString).\(ext)")
+        guard let session = AVAssetExportSession(asset: prepared.composition, presetName: audioOnly ? AVAssetExportPresetAppleM4A : AVAssetExportPresetHighestQuality) else {
             error = "Export oturumu oluşturulamadı."; return
         }
-        session.outputURL = temporary; session.outputFileType = .mp4
+        session.outputURL = temporary; session.outputFileType = fileType
         session.videoComposition = prepared.videoComposition; session.audioMix = prepared.audioMix
         session.shouldOptimizeForNetworkUse = true
         showingHome = false
@@ -387,7 +413,7 @@ final class EditorStore: ObservableObject {
                 if FileManager.default.fileExists(atPath: destination.path) {
                     _ = try FileManager.default.replaceItemAt(destination, withItemAt: temporary)
                 } else { try FileManager.default.moveItem(at: temporary, to: destination) }
-                exportProgress = 1; status = "Video hazır: \(destination.lastPathComponent)"
+                exportProgress = 1; status = "Dışa aktarıldı: \(destination.lastPathComponent)"
                 NSWorkspace.shared.activateFileViewerSelecting([destination])
             } catch {
                 self.error = "Export dosyası taşınamadı: \(error.localizedDescription). Geçici dosya: \(temporary.path)"

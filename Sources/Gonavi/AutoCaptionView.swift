@@ -101,10 +101,10 @@ final class AutoCaptionController: ObservableObject {
                 if let captions = controller.captions, !captions.isEmpty {
                     Button(store.project.captions.isEmpty ? "Altyazıları Ekle" : "Mevcut Altyazıları Değiştir") {
                         store.applyGeneratedCaptions(captions)
-                    }.buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction)
+                    }.buttonStyle(StudioButtonStyle(primary: true)).keyboardShortcut(.defaultAction)
                 } else {
                     Button(controller.model.installed ? "Altyazı Oluştur" : "Modeli İndir ve Oluştur") { controller.generate(store.project) }
-                        .buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction).disabled(controller.working)
+                        .buttonStyle(StudioButtonStyle(primary: true)).keyboardShortcut(.defaultAction).disabled(controller.working)
                 }
             }
         }
@@ -123,7 +123,7 @@ final class AutoCaptionController: ObservableObject {
             Divider()
             Label(controller.model.installed ? "Model bu Mac’te hazır" : "İlk kullanımda model indirilir", systemImage: controller.model.installed ? "checkmark.circle" : "arrow.down.circle")
                 .font(.callout)
-            Text("İndirmeden sonra internet gerekmez. Videolarınız ve sesiniz gönderilmez. Ana video kliplerinin orijinal sesi kullanılır; eklediğiniz müzik işleme dahil edilmez.")
+            Text("İndirmeden sonra internet gerekmez. Videolarınız ve sesiniz gönderilmez. Ana kurgu kliplerinin orijinal sesi kullanılır; eklediğiniz müzik işleme dahil edilmez.")
                 .font(.caption).foregroundStyle(Theme.secondary)
             Text("Sonucu eklemeden önce inceleyebilirsiniz. Mevcut altyazılarınız siz uygulayana kadar korunur.")
                 .font(.caption).foregroundStyle(Theme.secondary)

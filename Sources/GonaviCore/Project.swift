@@ -12,8 +12,14 @@ public struct EditTime: Codable, Hashable, Comparable, Sendable {
     public var seconds: Double { Double(ticks) / Double(Self.scale) }
     public static let zero = EditTime(ticks: 0)
     public static func < (a: Self, b: Self) -> Bool { a.ticks < b.ticks }
-    public static func + (a: Self, b: Self) -> Self { .init(ticks: a.ticks + b.ticks) }
-    public static func - (a: Self, b: Self) -> Self { .init(ticks: a.ticks - b.ticks) }
+    public static func + (a: Self, b: Self) -> Self {
+        let result = a.ticks.addingReportingOverflow(b.ticks)
+        return .init(ticks: result.overflow ? (b.ticks >= 0 ? .max : .min) : result.partialValue)
+    }
+    public static func - (a: Self, b: Self) -> Self {
+        let result = a.ticks.subtractingReportingOverflow(b.ticks)
+        return .init(ticks: result.overflow ? (b.ticks < 0 ? .max : .min) : result.partialValue)
+    }
 }
 
 public enum ScenePreset: String, CaseIterable, Codable, Sendable {
@@ -40,6 +46,8 @@ public struct VideoClip: Codable, Identifiable, Equatable, Sendable {
     public var id: UUID = UUID()
     public var sourceID: UUID
     public var sourceStart: EditTime = .zero
+    /// Missing in schema 1: the clip follows the preceding clip. New edits persist explicit positions.
+    public var timelineStart: EditTime? = nil
     public var duration: EditTime
     public var zoom: Double = 1
     public var offsetX: Double = 0
@@ -76,7 +84,7 @@ public enum ProjectError: LocalizedError {
 }
 
 public struct Project: Codable, Equatable, Sendable {
-    public var schemaVersion: Int = 1
+    public var schemaVersion: Int = 2
     public var name: String = "Yeni proje"
     public var scene: ScenePreset = .portrait
     public var fps: Int = 30
@@ -85,17 +93,125 @@ public struct Project: Codable, Equatable, Sendable {
     public var music: MusicClip?
     public var captions: [Caption] = []
     public init() {}
-    public var duration: EditTime { clips.reduce(.zero) { $0 + $1.duration } }
+    public var duration: EditTime {
+        guard !clips.isEmpty else {
+            return sources.first(where: { $0.id == music?.sourceID })?.duration ?? .zero
+        }
+        var cursor = EditTime.zero, end = EditTime.zero
+        for clip in clips {
+            cursor = (clip.timelineStart ?? cursor) + clip.duration
+            end = max(end, cursor)
+        }
+        return end
+    }
     public func start(of id: UUID) -> EditTime {
         var result = EditTime.zero
-        for clip in clips { if clip.id == id { return result }; result = result + clip.duration }
+        for clip in clips {
+            result = clip.timelineStart ?? result
+            if clip.id == id { return result }
+            result = result + clip.duration
+        }
         return result
+    }
+
+    /// Resolve legacy implicit placement before any structural edit, preserving equal-time order.
+    public mutating func normalizeTimeline() {
+        var cursor = EditTime.zero
+        for index in clips.indices {
+            clips[index].timelineStart = clips[index].timelineStart ?? cursor
+            cursor = clips[index].timelineStart! + clips[index].duration
+        }
+        clips = clips.enumerated().sorted {
+            let left = $0.element.timelineStart!, right = $1.element.timelineStart!
+            return left == right ? $0.offset < $1.offset : left < right
+        }.map(\.element)
+        schemaVersion = 2
+    }
+
+    /// Choose the nearest free placement; ties prefer the earlier gap. This never overwrites a clip.
+    public func resolvedPlacement(at proposed: EditTime, duration length: EditTime,
+                                  excluding excludedID: UUID? = nil) -> EditTime {
+        let lengthTicks = max(0, length.ticks)
+        let latest = Int64.max - lengthTicks
+        let desired = min(latest, max(0, proposed.ticks))
+        var cursor = EditTime.zero
+        var occupied: [(start: Int64, end: Int64)] = []
+        for clip in clips {
+            let start = clip.timelineStart ?? cursor
+            cursor = start + clip.duration
+            if clip.id != excludedID { occupied.append((max(0, start.ticks), max(0, cursor.ticks))) }
+        }
+        occupied.sort { $0.start == $1.start ? $0.end < $1.end : $0.start < $1.start }
+        var best: Int64?, bestDistance = Int64.max, lower: Int64 = 0
+        func consider(_ minimum: Int64, _ maximum: Int64) {
+            guard minimum <= maximum, minimum <= latest else { return }
+            let candidate = min(maximum, max(minimum, desired))
+            let distance = candidate >= desired ? candidate - desired : desired - candidate
+            if best == nil || distance < bestDistance || (distance == bestDistance && candidate < best!) {
+                best = candidate; bestDistance = distance
+            }
+        }
+        for interval in occupied {
+            if interval.start >= lengthTicks { consider(lower, interval.start - lengthTicks) }
+            lower = max(lower, interval.end)
+        }
+        consider(lower, latest)
+        return EditTime(ticks: best ?? desired)
+    }
+
+    @discardableResult
+    public mutating func appendSourceToTimeline(source: MediaSource, at time: EditTime? = nil) -> UUID {
+        normalizeTimeline()
+        if !sources.contains(where: { $0.id == source.id }) { sources.append(source) }
+        var clip = VideoClip(sourceID: source.id, duration: source.duration)
+        let end = clips.last.map { ($0.timelineStart ?? .zero) + $0.duration } ?? .zero
+        clip.timelineStart = resolvedPlacement(at: time ?? end, duration: clip.duration)
+        clips.append(clip); normalizeTimeline()
+        return clip.id
+    }
+
+    /// Caption fragments inside this clip follow it; fragments outside it remain timeline-anchored.
+    @discardableResult
+    public mutating func placeClip(id: UUID, at time: EditTime) -> EditTime {
+        normalizeTimeline()
+        guard let index = clips.firstIndex(where: { $0.id == id }) else { return time }
+        let previous = clips[index].timelineStart!, length = clips[index].duration
+        let placed = resolvedPlacement(at: time, duration: length, excluding: id)
+        guard placed != previous else { return placed }
+        let upper = previous + length, delta = placed - previous
+        captions = captions.flatMap { caption -> [Caption] in
+            let end = caption.start + caption.duration
+            let insideStart = max(previous, caption.start), insideEnd = min(upper, end)
+            guard insideStart < insideEnd else { return [caption] }
+            var pieces: [Caption] = []
+            func fragment(start: EditTime, end: EditTime, offset: EditTime = .zero) {
+                guard start < end else { return }
+                var piece = caption
+                if !pieces.isEmpty { piece.id = UUID() }
+                piece.start = start + offset; piece.duration = end - start
+                pieces.append(piece)
+            }
+            fragment(start: caption.start, end: insideStart)
+            fragment(start: insideStart, end: insideEnd, offset: delta)
+            fragment(start: insideEnd, end: end)
+            return pieces
+        }.sorted { $0.start < $1.start }
+        clips[index].timelineStart = placed
+        normalizeTimeline()
+        // Timeline-anchored captions outside a moved last clip cannot extend an otherwise empty project.
+        let end = duration
+        captions = captions.compactMap { caption in
+            guard caption.start < end else { return nil }
+            var clipped = caption; clipped.duration = min(caption.duration, end - caption.start)
+            return clipped.duration.ticks > 0 ? clipped : nil
+        }
+        return placed
     }
     public func validate() throws {
         func check(_ test: Bool, _ message: String) throws {
             if !test { throw ProjectError.invalid(message) }
         }
-        try check(schemaVersion == 1, "Bu proje sürümü desteklenmiyor.")
+        try check([1, 2].contains(schemaVersion), "Bu proje sürümü desteklenmiyor.")
         try check([24, 25, 30, 60].contains(fps), "Geçersiz kare hızı.")
         try check(sources.count <= 10_000 && clips.count <= 10_000 && captions.count <= 100_000,
                   "Proje öğe sınırını aşıyor.")
@@ -105,10 +221,10 @@ public struct Project: Codable, Equatable, Sendable {
         for source in sources {
             try check(source.duration.ticks > 0 && source.duration.seconds <= 86400, "Geçersiz medya süresi.")
         }
-        var total: Int64 = 0
+        var total: Int64 = 0, previousEnd: Int64 = 0
         for clip in clips {
-            guard let source = sources.first(where: { $0.id == clip.sourceID }), source.isVideo else {
-                throw ProjectError.invalid("Klip için video kaynağı bulunamadı.")
+            guard let source = sources.first(where: { $0.id == clip.sourceID }) else {
+                throw ProjectError.invalid("Klip için medya kaynağı bulunamadı.")
             }
             try check(clip.sourceStart.ticks >= 0 && clip.duration.ticks > 0
                       && clip.sourceStart.ticks <= source.duration.ticks
@@ -118,12 +234,16 @@ public struct Project: Codable, Equatable, Sendable {
                       && clip.offsetX.isFinite && (-1...1).contains(clip.offsetX)
                       && clip.offsetY.isFinite && (-1...1).contains(clip.offsetY)
                       && clip.volume.isFinite && (0...2).contains(clip.volume), "Geçersiz klip ayarı.")
-            total += clip.duration.ticks
+            let start = clip.timelineStart?.ticks ?? previousEnd
+            try check(start >= 0 && start >= previousEnd && start <= Int64.max - clip.duration.ticks,
+                      "Klipler çakışamaz ve zaman çizelgesinde sıralı olmalı.")
+            previousEnd = start + clip.duration.ticks
+            total = max(total, previousEnd)
         }
-        try check(total <= EditTime.scale * 86400, "Proje en fazla 24 saat olabilir.")
         if let music {
             try check(sources.contains { $0.id == music.sourceID }, "Müzik kaynağı bulunamadı.")
             try check(music.volume.isFinite && (0...2).contains(music.volume), "Geçersiz müzik seviyesi.")
+            if clips.isEmpty { total = sources.first(where: { $0.id == music.sourceID })!.duration.ticks }
         }
         for caption in captions {
             try check(caption.start.ticks >= 0 && caption.start.ticks < total
@@ -135,6 +255,7 @@ public struct Project: Codable, Equatable, Sendable {
     }
 
     public mutating func split(_ id: UUID, at timelineTime: EditTime) throws {
+        normalizeTimeline()
         guard let index = clips.firstIndex(where: { $0.id == id }) else { return }
         let offset = timelineTime - start(of: id)
         let minimum = EditTime(ticks: EditTime.scale / Int64(fps))
@@ -143,6 +264,7 @@ public struct Project: Codable, Equatable, Sendable {
         }
         var right = clips[index]
         right.id = UUID(); right.sourceStart = right.sourceStart + offset
+        right.timelineStart = timelineTime
         right.duration = right.duration - offset
         clips[index].duration = offset
         clips.insert(right, at: index + 1)
@@ -151,6 +273,7 @@ public struct Project: Codable, Equatable, Sendable {
     /// The first milestone uses timeline-anchored captions. A ripple removal maps
     /// both ends through the removed interval and drops fully removed captions.
     public mutating func remove(_ id: UUID) {
+        normalizeTimeline()
         guard let index = clips.firstIndex(where: { $0.id == id }) else { return }
         let lower = start(of: id), upper = lower + clips[index].duration
         func map(_ time: EditTime) -> EditTime {
@@ -165,6 +288,15 @@ public struct Project: Codable, Equatable, Sendable {
             return updated.duration.ticks > 0 ? updated : nil
         }
         clips.remove(at: index)
+        for index in clips.indices {
+            clips[index].timelineStart = map(clips[index].timelineStart!)
+        }
+        let end = duration
+        captions = captions.compactMap { caption in
+            guard caption.start < end else { return nil }
+            var clipped = caption; clipped.duration = min(caption.duration, end - caption.start)
+            return clipped.duration.ticks > 0 ? clipped : nil
+        }
     }
 
     public func encoded() throws -> Data {
@@ -174,8 +306,10 @@ public struct Project: Codable, Equatable, Sendable {
     }
     public static func decode(_ data: Data) throws -> Self {
         guard data.count <= 32 * 1024 * 1024 else { throw ProjectError.invalid("Proje dosyası çok büyük.") }
-        let project = try JSONDecoder().decode(Self.self, from: data)
-        try project.validate(); return project
+        var project = try JSONDecoder().decode(Self.self, from: data)
+        try project.validate()
+        if project.schemaVersion == 1 { project.normalizeTimeline() }
+        return project
     }
     public func srt() -> String {
         func stamp(_ value: EditTime) -> String {
