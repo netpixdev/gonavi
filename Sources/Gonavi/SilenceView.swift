@@ -25,6 +25,9 @@ import SwiftUI
 
     func generate(store: EditorStore) {
         guard !working else { return }
+        guard !onlySelected || store.activeClip != nil else {
+            failure = "Analiz için bir klip seçin veya Tüm kurgu kapsamını kullanın."; return
+        }
         stopAudition(store: store)
         let project = store.project
         let ids: Set<UUID>? = onlySelected ? store.selectedClip.map { Set([$0]) } : nil
@@ -98,7 +101,7 @@ import SwiftUI
     @StateObject private var controller: SilenceController
     init(store: EditorStore, controller: SilenceController? = nil) {
         self.store = store
-        _controller = StateObject(wrappedValue: controller ?? SilenceController(hasSelection: store.selectedClip != nil))
+        _controller = StateObject(wrappedValue: controller ?? SilenceController(hasSelection: store.activeClip != nil))
     }
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -125,7 +128,7 @@ import SwiftUI
                     .fixedSize(horizontal: false, vertical: true)
             }
             Text("Ana kurgu sesi analiz edilir. Klipler ve altyazılar birlikte kısalır; arka plan müziği kesilmez, yeni proje süresine uyarlanır. Kaynak dosyalar değişmez.")
-                .font(.caption).foregroundStyle(Theme.secondary)
+                .font(.caption).foregroundStyle(Theme.secondary).fixedSize(horizontal: false, vertical: true)
             Divider()
             HStack {
                 if controller.working { Button("Analizi İptal Et", action: controller.cancel) }
@@ -149,20 +152,29 @@ import SwiftUI
         VStack(alignment: .leading, spacing: 16) {
             Picker("Kapsam", selection: $controller.onlySelected) {
                 Text("Tüm kurgu").tag(false)
-                Text("Seçili klip").tag(true).disabled(store.selectedClip == nil)
+                Text("Seçili klip").tag(true).disabled(store.activeClip == nil)
             }.pickerStyle(.segmented)
             setting("Ses eşiği", value: $controller.thresholdDB, range: -60 ... -20, step: 1, suffix: "dBFS", decimals: 0)
             setting("En az sessizlik", value: $controller.minimumDuration, range: 0.2 ... 3, step: 0.1, suffix: "sn", decimals: 1)
             setting("Uçlarda korunan pay", value: $controller.padding, range: 0 ... 0.5, step: 0.02, suffix: "sn", decimals: 2)
             Text("Eşik yükseldikçe daha fazla düşük ses kesime aday olur. Pay, her sessizliğin iki ucunda sesi korur. Bu analiz ses seviyesine dayanır; konuşmayı tanıyan bir model değildir.")
-                .font(.caption).foregroundStyle(Theme.secondary)
+                .font(.caption).foregroundStyle(Theme.secondary).fixedSize(horizontal: false, vertical: true)
             Label("Bu Mac’te · Ücretsiz · Model indirmeden", systemImage: "internaldrive").font(.callout).foregroundStyle(Theme.accent)
         }.disabled(controller.working)
     }
     private func setting(_ title: String, value: Binding<Double>, range: ClosedRange<Double>, step: Double, suffix: String, decimals: Int) -> some View {
         HStack(spacing: 16) {
             Text(title).frame(width: 160, alignment: .leading)
-            Slider(value: value, in: range, step: step).accessibilityLabel(title)
+            Slider(value: Binding(get: { value.wrappedValue }, set: { proposed in
+                value.wrappedValue = min(range.upperBound, max(range.lowerBound, (proposed / step).rounded() * step))
+            }), in: range).accessibilityLabel(title)
+                .accessibilityAdjustableAction { direction in
+                    switch direction {
+                    case .increment: value.wrappedValue = min(range.upperBound, value.wrappedValue + step)
+                    case .decrement: value.wrappedValue = max(range.lowerBound, value.wrappedValue - step)
+                    @unknown default: break
+                    }
+                }
             Text(String(format: "%.*f %@", decimals, value.wrappedValue, suffix)).font(.callout.monospacedDigit())
                 .frame(width: 80, alignment: .trailing)
         }
@@ -207,7 +219,7 @@ import SwiftUI
                 }
             }.frame(height: 190).background(Theme.inset, in: RoundedRectangle(cornerRadius: 8))
             Text("Dinle, kesim aralığını iki yanında 0,25 sn ile çalar. Kısık konuşma veya nefesleri korumak için ilgili kesimin seçimini kaldırın.")
-                .font(.caption).foregroundStyle(Theme.secondary)
+                .font(.caption).foregroundStyle(Theme.secondary).fixedSize(horizontal: false, vertical: true)
         }
         if !result.skippedSources.isEmpty {
             Text("Ses hattı olmadığı için atlandı: " + result.skippedSources.joined(separator: ", "))

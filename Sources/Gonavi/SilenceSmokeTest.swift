@@ -30,7 +30,7 @@ enum SilenceSmokeTest {
         controller.onlySelected = false
         let settingsController = SilenceController(hasSelection: true)
         settingsController.onlySelected = false
-        try SmokeTest.snapshot(SilenceView(store: store, controller: settingsController), size: CGSize(width: 740, height: 510),
+        try SmokeTest.snapshot(SilenceView(store: store, controller: settingsController).frame(height: 510).background(Theme.panel), size: CGSize(width: 740, height: 510),
                                to: directory.appendingPathComponent("silence-settings.png"))
         // Snapshot teardown delivers SwiftUI onDisappear on the next run-loop turn.
         // Let it finish before starting an analysis or audition on another view.
@@ -48,7 +48,7 @@ enum SilenceSmokeTest {
         for cut in result.candidates {
             try SmokeTest.require(cut.start.ticks % 2000 == 0 && cut.end.ticks % 2000 == 0, "Cut not frame aligned")
         }
-        try SmokeTest.snapshot(SilenceView(store: store, controller: controller), size: CGSize(width: 740, height: 640),
+        try SmokeTest.snapshot(SilenceView(store: store, controller: controller).frame(height: 640).background(Theme.panel), size: CGSize(width: 740, height: 640),
                                to: directory.appendingPathComponent("silence-review.png"))
         try await Task.sleep(nanoseconds: 150_000_000)
 
