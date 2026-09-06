@@ -1,10 +1,10 @@
 # Gonavi
 
-SwiftUI tabanlı, yerel çalışan macOS video editörü. **0.3 teknik önizleme**; CapCut kapsamındaki tam ürün henüz tamamlanmadı.
+SwiftUI tabanlı, yerel çalışan macOS video editörü. **0.4 teknik önizleme**; CapCut kapsamındaki tam ürün henüz tamamlanmadı.
 
 ## İndir ve çalıştır
 
-1. [Actions](https://github.com/netpixdev/gonavi/actions/workflows/macos.yml) sayfasında **başarılı** son çalışmayı aç.
+1. [GitHub Releases](https://github.com/netpixdev/gonavi/releases) üzerinden sürüm paketini indir veya [Actions](https://github.com/netpixdev/gonavi/actions/workflows/macos.yml) sayfasında **başarılı** son çalışmayı aç.
 2. Intel Mac için `Gonavi-macOS-x86_64`, M serisi Mac için `Gonavi-macOS-arm64` artifact'ını indir. Artifact içindeki aynı adlı ZIP dosyasını aç.
 3. `Gonavi.app` dosyasını Applications klasörüne taşı ve aç.
 4. macOS geliştiriciyi doğrulayamadığını söylerse, bu uygulama için Sistem Ayarları → Gizlilik ve Güvenlik → Yine de Aç yolunu kullan.
@@ -17,7 +17,10 @@ SwiftUI tabanlı, yerel çalışan macOS video editörü. **0.3 teknik önizleme
 - Proje adı, oran ve FPS seçimiyle yeni proje oluşturma penceresi.
 - Kurtarılabilir oturumu açılışta gösterme; kullanıcı seçince devam etme.
 - Video/ses dosyası içe aktarma ve Finder'dan toplu sürükle bırak.
-- Bir ana video hattında ardışık klipler; klibi bölme, ripple silme, sürükleyerek yeniden sıralama.
+- Bir ana kurgu hattında video ve ses klipleri; bölme, ripple silme, boşluk bırakarak taşıma ve yakın kenarlara mıknatıslanma.
+- Video ve yalnızca ses dosyalarında gerçek tepe/RMS dalga formu; sessizlik, düşük ses ve güçlü ses bölgeleri aynı ölçekte görünür.
+- Görünen bölümü çizen AppKit timeline; yatay kaydırma, yakınlaştırma, sığdırma ve sürükleme sırasında kenarda otomatik kaydırma.
+- Yalnızca ses dosyasıyla kurgu, oynatma, otomatik altyazı ve M4A dışa aktarma.
 - 9:16, 16:9, 1:1, 4:5 sahneleri; 24/25/30/60 fps.
 - Fit/fill (crop), zoom, yatay/dikey konum ve klip ses seviyesi.
 - Bağımsız bir müzik hattı ve ses seviyesi; müzik döngüye alınmaz.
@@ -33,7 +36,13 @@ Başlangıçta **Yeni proje** seç; ad, sahne oranı ve FPS belirleyip **Projeyi
 
 Editörün sol üstündeki çalışma alanı düğmesi başlangıca döner; açık proje korunur. Son projelerde sağ tık → **Geçmişten Kaldır**, yalnızca geçmiş kaydını kaldırır. Kaynak dosyayı silmez. Bir proje taşınırsa **Proje aç** ile yeni konumunu seçebilirsin.
 
-Timeline yakınlaştırma sağ üstteki kaydırıcıyla değişir. Klipler diğer klibin üzerine bırakılınca onun önüne taşınır. Bir klibi sona taşımak için son klibi onun önüne taşıyabilirsin; doğrudan boş alana bırakma henüz desteklenmez.
+Timeline üzerinde iki parmak veya fare tekerleğiyle yatay gezin. `⌘` ile kaydırmak imleç çevresinde yakınlaştırır; **Sığdır** bütün projeyi gösterir. Sağ/sol ok düğmeleri bir görünüm kadar kaydırır. Oynatma sırasında çizgi görünür tutulur. Boş zamana klip bırakarak projeyi uzatabilirsin; tuvalin genişliği proje süresiyle büyümez. Eski 24 saatlik toplam proje sınırı kaldırıldı. Matematiksel sonsuzluk iddiası yoktur: en fazla 10.000 klip/medya, kaynak başına 24 saat ve fiziksel cihaz kaynakları sınırları geçerlidir.
+
+**Mıknatıs** açıkken klibin başı veya sonu, 8 ekran pikseli yakınındaki klip uçlarına ve oynatma çizgisine hizalanır. Sarı çizgi hedefi, kesikli dikdörtgen bırakılacak konumu gösterir. Timeline odaktayken `S` açıp kapatır; `⌥` sürükleme sırasında geçici olarak kapatır. Çakışan kliplerin üzerine yazılmaz; en yakın yeterli boşluk seçilir. Taşıma önceki yerde boşluk bırakır. **Sil**, klip süresini kaldırıp sonraki klipleri ve altyazıları kaydırır. Her taşıma tek undo işlemidir.
+
+Finder'dan timeline'a veya medya listesine dosya bırakılabilir. Medya listesindeki öğe timeline'a sürüklenince yeni kopyası eklenir. Ses dosyası ana hatta kendi klibi olarak eklenir; ayrıca müzik için medyada sağ tık → **Müzik Olarak Ekle** kullanılabilir.
+
+Dalga formunun dış kısmı tepeyi, iç kısmı RMS seviyesini gösterir. Ortak karekök gösterim ölçeği düşük sesleri görünür kılar; dosyalar ayrı ayrı normalize edilmez. Sıfıra yakın ses düz çizgi olur, yüksek tepe genişler; tam ölçeğe yaklaşan tepe turuncudur. Bu bir LUFS veya konuşma/sessizlik sınıflandırıcısı değildir. Stereo kanallar birbirini söndürmez: tepe kanalların maksimumu, RMS kanal enerjilerinin ortalamasıdır. Kaynakta ses hattı yoksa **Ses hattı yok**, analiz sürüyorsa ayrı yükleme durumu gösterilir. Önbellek `~/Library/Caches/Gonavi/Waveforms` içindedir (disk bütçesi 256 MB); dosya değişince veya **Dalga Formunu Yeniden Oku** ile yenilenir.
 
 ## Ücretsiz otomatik Türkçe altyazı
 
@@ -49,7 +58,7 @@ Ana video kliplerinin orijinal sesi kullanılır; ek müzik ve ses seviyesi efek
 - Otomatik altyazının yazım ve zaman kodları kontrol edilmelidir. Müzik, gürültü ve uzun sessizliklerde yanlış metin üretilebilir. Temel sessiz-ses kontrolü vardır; tam konuşma algılama/VAD henüz yoktur. Uzun klipler 5 dakikalık parçalara ayrılır; parça sınırındaki sözcükler düzeltme gerektirebilir. Apple Speech motoru henüz eklenmedi.
 - Kırpma bu aşamada böl + sil ile yapılır; kenardan sürükleyerek trim henüz yok.
 - `.gonavi` şu anda bir JSON dosyasıdır; medya dosyalarını içine kopyalayan taşınabilir paket henüz yok. Kaynak medya dosyalarını sakla.
-- Altyazılar timeline zamanına bağlıdır. Klip silme altyazıları kaydırır; klip sıralama altyazıları beraber taşımaz. Kaynak zamana bağlı altyazı modeli sonraki aşamadır.
+- Klip içindeki altyazılar taşımayı takip eder. Klip sınırını aşan altyazı bölünür; aynı metin parçaların her birinde kalır. Sonucu gözden geçir. Eski şema 1 projeleri açılırken konumlar şema 2'ye taşınır; yeni kaydı eski Gonavi sürümleri açamaz.
 - Proje zamanlarında 60.000 tick/sn kullanılır. Render süreleri çıktı FPS'ine oturtulur; VFR/telefon/HDR uyumluluğu fiziksel Mac testleriyle genişletilecek.
 - Render SDR/Rec.709 hedefler; HDR koruma ve profesyonel renk doğruluğu iddiası yoktur.
 - Yerel font ve bitmap altyazı; mevcut ilk tasarım uzun metin için en fazla 500 karakter kabul eder. Kısa altyazı blokları kullan.
@@ -84,4 +93,4 @@ CI, Intel ve ARM üzerinde çekirdek kurgu testlerini çalıştırır; Release `
 | `Sources/Gonavi/SmokeTest.swift` | Üretilmiş medya ile gerçek export doğrulaması |
 | `.github/workflows/macos.yml` | macOS build ve test |
 
-İlk timeline SwiftUI ile kurulmuştur; geniş projelerde sanallaştırılmış AppKit çizimiyle değiştirilecek. Core Image, uygun cihazda GPU kullanabilir; özel Metal shader pipeline'ı henüz yoktur.
+Timeline, yalnızca görünür bölgeyi çizen AppKit görünümüdür. Dalga özeti kademeli tepe/RMS verisinden çizilir; ham PCM bütünü bellekte tutulmaz. Core Image, uygun cihazda GPU kullanabilir; özel Metal shader pipeline'ı henüz yoktur.

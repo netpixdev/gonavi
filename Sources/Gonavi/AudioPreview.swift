@@ -21,10 +21,10 @@ struct AudioPreview: View {
                     let a = Double(index) / Double(count) * waveform.duration
                     let b = Double(index + 1) / Double(count) * waveform.duration
                     let level = waveform.level(in: a..<b)
-                    let height = sqrt(Double(level.peak)) * size.height
-                    let inner = sqrt(Double(level.rms)) * size.height
-                    peaks.addRect(CGRect(x: Double(index) * 3, y: (size.height - height) / 2, width: 2, height: max(0.5, height)))
-                    rms.addRect(CGRect(x: Double(index) * 3, y: (size.height - inner) / 2, width: 2, height: inner))
+                    let height: CGFloat = CGFloat(sqrt(Double(level.peak))) * size.height
+                    let inner: CGFloat = CGFloat(sqrt(Double(level.rms))) * size.height
+                    peaks.addRect(CGRect(x: CGFloat(index) * 3, y: (size.height - height) / 2, width: 2, height: max(0.5, height)))
+                    rms.addRect(CGRect(x: CGFloat(index) * 3, y: (size.height - inner) / 2, width: 2, height: inner))
                 }
                 context.fill(peaks, with: .color(Theme.accent.opacity(0.4)))
                 context.fill(rms, with: .color(Theme.accent))

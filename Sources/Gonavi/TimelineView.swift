@@ -227,11 +227,11 @@ private struct TimelineSurface: NSViewRepresentable {
             let b = min(sourceStart + duration, a + 2 / store.timeline.pixelsPerSecond)
             let level = waveform.level(in: a..<max(a, b))
             let peak = min(1, Double(level.peak) * gain), rms = min(1, Double(level.rms) * gain)
-            let height = sqrt(peak) * Double(rect.height) * 0.92
+            let height: CGFloat = CGFloat(sqrt(peak)) * rect.height * 0.92
             if height > 0.1 {
                 (peak >= 0.98 ? NSColor.systemOrange : color.withAlphaComponent(0.66)).setFill()
                 NSRect(x: pixel, y: rect.midY - height / 2, width: 1.4, height: height).fill()
-                color.setFill(); let body = sqrt(rms) * Double(rect.height) * 0.92
+                color.setFill(); let body: CGFloat = CGFloat(sqrt(rms)) * rect.height * 0.92
                 NSRect(x: pixel, y: rect.midY - body / 2, width: 1.4, height: body).fill()
             }
             pixel += 2
