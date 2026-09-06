@@ -315,6 +315,7 @@ final class EditorStore: ObservableObject {
                 let frame = try await generator.image(at: CMTime(seconds: time, preferredTimescale: 60000)).image
                 try Task.checkCancellation()
                 self?.previewFrame = NSImage(cgImage: frame, size: .zero)
+                self?.previewGenerator = nil
             } catch { /* AVPlayer remains the fallback for sources without still-frame support. */ }
         }
     }

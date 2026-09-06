@@ -16,7 +16,9 @@ struct RenderCaption {
 final class FrameInstruction: NSObject, AVVideoCompositionInstructionProtocol {
     let timeRange: CMTimeRange
     let enablePostProcessing = true
-    let containsTweening = false
+    // Captions can change while a held source frame stays identical. Request every
+    // output frame, including trailing black regions, on both hardware encoders.
+    let containsTweening = true
     let requiredSourceTrackIDs: [NSValue]?
     let passthroughTrackID: CMPersistentTrackID = kCMPersistentTrackID_Invalid
     let trackID: CMPersistentTrackID
@@ -201,6 +203,7 @@ enum MediaEngine {
         let video = AVMutableVideoComposition()
         video.customVideoCompositorClass = GonaviCompositor.self
         video.renderSize = size; video.frameDuration = CMTime(value: 1, timescale: Int32(project.fps))
+        video.sourceTrackIDForFrameTiming = kCMPersistentTrackID_Invalid
         video.instructions = instructions
         video.colorPrimaries = AVVideoColorPrimaries_ITU_R_709_2
         video.colorTransferFunction = AVVideoTransferFunction_ITU_R_709_2

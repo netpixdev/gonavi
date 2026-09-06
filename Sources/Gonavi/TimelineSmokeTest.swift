@@ -17,7 +17,7 @@ enum TimelineSmokeTest {
         try SmokeTest.require(waveform.level(in: 2.2..<3.8).peak < 0.08 && waveform.level(in: 2.2..<3.8).peak > 0.02, "Quiet amplitude was normalized")
         try SmokeTest.require(waveform.level(in: 4.2..<5.8).peak > 0.7, "Loud region peak missing")
         let picture = directory.appendingPathComponent("picture.mov")
-        try await SmokeTest.makeVideo(picture, red: 0.12, green: 0.38)
+        try await SmokeTest.makeVideo(picture, red: 0.12, green: 0.38, illustrated: true)
         let mux = AVMutableComposition()
         let vt = mux.addMutableTrack(withMediaType: .video, preferredTrackID: kCMPersistentTrackID_Invalid)!
         let at = mux.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid)!
@@ -145,9 +145,12 @@ enum TimelineSmokeTest {
         print("Timeline: export completed, reading output duration")
         let duration = try await asset.load(.duration)
         try SmokeTest.require(abs(duration.seconds - 17) < 0.05, "Gapped export duration mismatch")
+        let videoTrack = try await asset.loadTracks(withMediaType: .video)[0]
+        let videoRange = try await videoTrack.load(.timeRange)
+        try SmokeTest.require(abs(CMTimeRangeGetEnd(videoRange).seconds - 17) < 0.05, "Video track ends before trailing audio segment")
         let generator = AVAssetImageGenerator(asset: asset)
         generator.requestedTimeToleranceBefore = .zero; generator.requestedTimeToleranceAfter = .zero
-        for second in [7.0, 14.0] {
+        for second in [7.0, 14.0, 16.9] {
             print("Timeline: decoding exported frame at \(second)s")
             let frame = try await generator.image(at: CMTime(seconds: second, preferredTimescale: 60000)).image
             let pixel = NSBitmapImageRep(cgImage: frame).colorAt(x: 100, y: 100)!.usingColorSpace(.deviceRGB)!

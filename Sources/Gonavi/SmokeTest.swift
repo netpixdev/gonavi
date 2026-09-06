@@ -154,7 +154,7 @@ enum SmokeTest {
         window.orderOut(nil)
     }
 
-    static func makeVideo(_ url: URL, red: CGFloat, green: CGFloat) async throws {
+    static func makeVideo(_ url: URL, red: CGFloat, green: CGFloat, illustrated: Bool = false) async throws {
         let writer = try AVAssetWriter(outputURL: url, fileType: .mov)
         let input = AVAssetWriterInput(mediaType: .video, outputSettings: [AVVideoCodecKey: AVVideoCodecType.h264,
                                                                        AVVideoWidthKey: 320, AVVideoHeightKey: 180])
@@ -178,6 +178,56 @@ enum SmokeTest {
                                     space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.noneSkipFirst.rawValue)!
             context.setFillColor(CGColor(red: red, green: green, blue: 0.1, alpha: 1))
             context.fill(CGRect(x: 0, y: 0, width: 320, height: 180))
+            if illustrated {
+                // A real generated video fixture for UI captures; pixel-test fixtures stay solid.
+                context.saveGState()
+                context.translateBy(x: 0, y: 180)
+                context.scaleBy(x: 1, y: -1)
+                context.setFillColor(CGColor(red: 0.08, green: 0.19, blue: 0.24, alpha: 1))
+                context.fill(CGRect(x: 0, y: 0, width: 320, height: 180))
+                context.setFillColor(CGColor(red: 0.86, green: 0.88, blue: 0.70, alpha: 1))
+                context.fillEllipse(in: CGRect(x: 231, y: 29, width: 29, height: 29))
+
+                let distant = CGMutablePath()
+                distant.move(to: CGPoint(x: 0, y: 108))
+                distant.addLine(to: CGPoint(x: 47, y: 79))
+                distant.addCurve(to: CGPoint(x: 120, y: 103), control1: CGPoint(x: 76, y: 64), control2: CGPoint(x: 96, y: 102))
+                distant.addLine(to: CGPoint(x: 169, y: 78))
+                distant.addCurve(to: CGPoint(x: 252, y: 106), control1: CGPoint(x: 199, y: 61), control2: CGPoint(x: 230, y: 102))
+                distant.addLine(to: CGPoint(x: 320, y: 99))
+                distant.addLine(to: CGPoint(x: 320, y: 141))
+                distant.addLine(to: CGPoint(x: 0, y: 141))
+                distant.closeSubpath()
+                context.addPath(distant)
+                context.setFillColor(CGColor(red: 0.31, green: 0.53, blue: 0.49, alpha: 1))
+                context.fillPath()
+
+                context.setFillColor(CGColor(red: 0.19, green: 0.42, blue: 0.44, alpha: 1))
+                context.fill(CGRect(x: 0, y: 111, width: 320, height: 69))
+                let coast = CGMutablePath()
+                coast.move(to: CGPoint(x: 0, y: 72))
+                coast.addCurve(to: CGPoint(x: 92, y: 115), control1: CGPoint(x: 34, y: 65), control2: CGPoint(x: 59, y: 99))
+                coast.addCurve(to: CGPoint(x: 186, y: 180), control1: CGPoint(x: 116, y: 145), control2: CGPoint(x: 165, y: 148))
+                coast.addLine(to: CGPoint(x: 0, y: 180))
+                coast.closeSubpath()
+                context.addPath(coast)
+                context.setFillColor(CGColor(red: 0.10, green: 0.28, blue: 0.29, alpha: 1))
+                context.fillPath()
+
+                let drift: CGFloat = CGFloat(index) / 60.0 * 4.0
+                context.setStrokeColor(CGColor(red: 0.52, green: 0.76, blue: 0.66, alpha: 0.65))
+                context.setLineWidth(1)
+                context.setLineCap(.round)
+                for stripe in 0..<5 {
+                    let row: CGFloat = CGFloat(stripe)
+                    let lineY: CGFloat = 121.0 + row * 10.0
+                    let lineX: CGFloat = 225.0 - row * 4.0 + drift
+                    context.move(to: CGPoint(x: lineX, y: lineY))
+                    context.addLine(to: CGPoint(x: lineX + 20.0 + row * 5.0, y: lineY))
+                    context.strokePath()
+                }
+                context.restoreGState()
+            }
             CVPixelBufferUnlockBaseAddress(buffer, [])
             try require(adaptor.append(buffer, withPresentationTime: CMTime(value: Int64(index), timescale: 30)), "Fixture append failed")
         }

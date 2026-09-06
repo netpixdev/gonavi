@@ -50,7 +50,7 @@ Editörde **Altyazı → Otomatik Altyazı** seç. Varsayılan **Dengeli** model
 
 İlk kullanımda **Modeli İndir ve Oluştur**, sonraki kullanımlarda **Altyazı Oluştur** de. Hesap, API anahtarı ve ücret gerekmez. Model bir kez Hugging Face üzerinden indirilir ve SHA-256 ile doğrulanır; videonun sesi cihazdan çıkmaz. Sonraki işlemler çevrimdışı çalışır. Modeller `~/Library/Application Support/Gonavi/Models` içinde tutulur; uygulama ZIP'ine dahil değildir.
 
-Ana video kliplerinin orijinal sesi kullanılır; ek müzik ve ses seviyesi efektleri dahil edilmez. İşlem ilerlemesi ve iptal vardır. Sonuç önce önizlenir, **Altyazıları Ekle / Mevcut Altyazıları Değiştir** ile uygulanır; tek `⌘Z` ile geri alınabilir. Altyazılar düzenlenebilir, SRT veya videoya gömülü olarak dışa aktarılabilir. [Motor ve model ayrıntıları](docs/AUTO-CAPTIONS.md).
+Ana kurgu hattındaki video ve ses kliplerinin orijinal sesi kullanılır; ek müzik ve ses seviyesi efektleri dahil edilmez. İşlem ilerlemesi ve iptal vardır. Sonuç önce önizlenir, **Altyazıları Ekle / Mevcut Altyazıları Değiştir** ile uygulanır; tek `⌘Z` ile geri alınabilir. Altyazılar düzenlenebilir, SRT veya videoya gömülü olarak dışa aktarılabilir. [Motor ve model ayrıntıları](docs/AUTO-CAPTIONS.md).
 
 ## Sınırlar
 
