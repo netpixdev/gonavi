@@ -1,6 +1,6 @@
 # Ücretsiz Türkçe otomatik altyazı — motor kararı
 
-Doğrulama tarihi: 5 Eylül 2026. Kullanıcı hedefi Intel MacBook, macOS Sonoma 14 veya üzeri; Apple Silicon paketi de korunur.
+Motor araştırması: 5 Eylül 2026. Uygulama durumu: 0.4, 6 Eylül 2026. Kullanıcı hedefi Intel MacBook, macOS Sonoma 14 veya üzeri; Apple Silicon paketi de korunur.
 
 ## Karar
 
@@ -12,7 +12,7 @@ Wispr Flow/WhisperFlow uygulamasına veya ücretli bir transkripsiyon aboneliği
 2. **İsteğe bağlı Apple yolu:** uygun macOS sürümü, donanım, Türkçe locale ve yerel model desteği sorgulanır. Destek doğrulanmadan Apple motoru kullanılabilir gösterilmez.
 3. Sesin Apple sunucularına otomatik gönderildiği bir fallback olmayacak. Eski Speech API'sinin ağ modu ayrıca eklenirse kullanıcıya hedef ve kısıtlar açıklanır, kullanıcı seçimi gerekir.
 
-0.3 sürümü whisper.cpp tabanlı otomatik Türkçe altyazı hattını uygular. Apple motoru gelecek seçenek olarak kalır; mevcut arayüzde destekleniyor gibi gösterilmez.
+0.3 sürümü whisper.cpp tabanlı otomatik Türkçe altyazı hattını uygular. 0.4'te ana kurgu hattındaki yalnızca ses klipleri ve boşluklu klip konumları da desteklenir. Apple motoru ve ortak değiştirilebilir motor arayüzü gelecek kapsamıdır; mevcut arayüzde Apple desteği gösterilmez.
 
 ### Uygulanan varsayılan
 
@@ -20,12 +20,14 @@ Wispr Flow/WhisperFlow uygulamasına veya ücretli bir transkripsiyon aboneliği
 - Dengeli: çok dilli `ggml-small-q5_1.bin`, 190.085.487 bayt. SHA-256 `ae85e4a935d7a567bd102fe55afc16bb595bdb618e11b2fc7591bc08120411bb`.
 - Daha yüksek doğruluk: çok dilli `ggml-medium-q5_0.bin`, 539.212.467 bayt. SHA-256 `19fea4b380c3a618ec4723c3eef2eb785ffba0d0538cf43f8f235e7b3b34220f`.
 - Model deposu sürümü: Hugging Face `ggerganov/whisper.cpp` revision `5359861c739e955e79d9a303bcbc70fb988958b1`. Boyut ve özet doğrulanmadan model kullanılmaz. Modeller ilk kullanımda ayrıca indirilir; indirildikten sonra ağ gerekmez.
-- Sabit Türkçe transkripsiyon (`-l tr`, çeviri kapalı). Beş dakikaya kadar kaynak ses parçaları, 16 kHz mono PCM WAV. Trim ve gecikmiş ses başlangıcı korunur. Ek müzik dahil edilmez.
+- Sabit Türkçe transkripsiyon (`-l tr`, çeviri kapalı). Ana kurgu hattındaki video ve ses kliplerinden beş dakikaya kadar kaynak ses parçaları, 16 kHz mono PCM WAV. Trim, gecikmiş ses başlangıcı ve klibin boşluklu timeline konumu korunur. Ayrı müzik hattı ve klip ses seviyesi efektleri tanımaya dahil edilmez.
 - CLI kelime sınırlarında kısa segmentler üretir; segment zamanları projeye taşınır. Sonuç önizlenir; bütün mevcut altyazıları değiştirme açık bir eylemdir ve tek adımda geri alınır. Hata ve iptal projeye kısmi sonuç yazmaz.
 
 Small seçimi Intel için boyut/bellek/doğruluk dengesi kararıdır; her Türkçe kayıt için en iyi doğruluğu verdiği iddia edilmez. Medium daha yavaş olabilir. Gerçek Türkçe kullanıcı videolarında WER/CER ve Intel işlem süresi henüz ölçülmemiştir. CI'da gerçek motorla İngilizce ses ve sistemde varsa sentetik Türkçe ses entegrasyon testleri çalışır; bunlar insan konuşması doğruluk karşılaştırması değildir.
 
-Henüz olmayanlar: VAD, kelime vurgusu, güven skoru arayüzü, altyazıyı sonraki klip sıralamasıyla birlikte taşıma ve kesintili indirmeye kaldığı yerden devam. Bozuk model arayüzden kaldırılıp yeniden indirilebilir. Beş dakikalık parça sınırlarında konuşma bağlamı kesilebilir.
+0.4'te klip içindeki altyazılar klip taşınırken birlikte taşınır; klip sınırını aşan altyazı bölünür ve aynı metin parçalarda korunur. Ripple silme zamanları yeniden eşler. Bu davranış kalıcı kaynak-zaman bağları veya kelime düzeyinde yeniden bölme değildir; taşıma sonrası sonuç gözden geçirilmelidir.
+
+Henüz olmayanlar: VAD, otomatik sessizlik kesme, kelime vurgusu, güven skoru arayüzü, kalıcı kaynak-zaman bağları ve kesintili indirmeye kaldığı yerden devam. Gerçek tepe/RMS dalga formu video, ana ses klibi ve müzikte ses seviyelerini gösterir; konuşma sınıflandırıcısı değildir ve kendiliğinden kesim yapmaz. Bozuk model arayüzden kaldırılıp yeniden indirilebilir. Beş dakikalık parça sınırlarında konuşma bağlamı kesilebilir.
 
 ## Apple Dikte ile API arasındaki fark
 
@@ -40,14 +42,14 @@ Kullanıcının paylaştığı [Apple Dikte kılavuzu](https://support.apple.com
 
 Apple'ın bu API belgelerinde sabit, kapsamlı bir Türkçe destek tablosu yoktur. Klavye Dikte listesinden SpeechTranscriber/DictationTranscriber desteği çıkarılmayacak. İncelenen belgelerden Intel tamamen desteklenmiyor sonucu da çıkarılmadı; donanım için isAvailable/supportedLocales kontrolü esas alınır.
 
-## Entegrasyon sırası
+## Mevcut altyapı ve sonraki entegrasyonlar
 
-1. TranscriptProvider ortak arayüzü: kaynak medya kimliği, kaynak zaman aralığı, locale, iptal ve ilerleme.
-2. Sesten metne sonuç modeli: metin, kelime/segment başlangıç-bitiş zamanları, varsa güven skoru ve kullanılan motor/model sürümü.
-3. Ses çıkarma: konuşma kaynağından, müzik miksajından önce. Uzun dosya için sınırlı bellek, geçici dosya temizliği ve kesintide güvenli iptal.
-4. Altyazı bölme: noktalama/duraklama, okunabilir satır uzunluğu ve süre sınırları. Kullanıcının düzelttiği metni koru.
-5. Kaynak-zaman → timeline-zaman eşlemesi: trim, split ve yeniden sıralama sonrası kayma olmamalı. 0.2'nin timeline'a bağlı manuel altyazı modeli bu aşamada genişletilir.
-6. Türkçe fixture'lar ve gerçek Intel Mac testi: özel isimler, düşük ses, arka plan müziği, 10+ dakikalık kayıt, model eksikliği ve iptal.
+1. Mevcut whisper.cpp hattını `TranscriptProvider` ortak arayüzüne ayır: kaynak medya kimliği, kaynak zaman aralığı, locale, iptal ve ilerleme. İkinci motor henüz yoktur.
+2. Mevcut segment metni/zamanları üzerine kelime düzeyinde zamanlar, varsa güven skoru ve kullanılan motor/model sürümü ekle.
+3. Kaynak sesten, müzik miksajından önce PCM çıkarma; beş dakikalık parçalar, geçici dosya temizliği ve güvenli iptal uygulanmıştır. Sonraki adım VAD ve parça sınırlarında bağlamı korumadır.
+4. Mevcut kısa segmentleri noktalama/duraklama, okunabilir satır uzunluğu ve süre sınırlarıyla iyileştir. Kullanıcının düzelttiği metni koru.
+5. Üretim sırasında trim ve klip başlangıcıyla timeline eşlemesi; sonraki taşıma ve ripple silmede altyazı zamanlarını güncelleme uygulanmıştır. Kalıcı kaynak-zaman bağları, hız değişimi ve çoklu katman eşlemesi ileriki kapsamdır.
+6. CI entegrasyonlarına ek olarak gerçek Intel Mac ve insan konuşmasıyla Türkçe test seti: özel isimler, düşük ses, arka plan müziği, 10+ dakikalık kayıt, model eksikliği ve iptal.
 
 ## Apple yolunda gerekli kontroller
 

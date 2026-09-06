@@ -58,9 +58,17 @@ enum TimelineSmokeTest {
         try await waitForStore(store)
         store.timeline.pixelsPerSecond = 60; store.selectedClip = firstID
         store.seek(4.8)
+        for _ in 0..<500 {
+            if store.previewFrame != nil { break }
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
+        try SmokeTest.require(store.previewFrame != nil, "Paused composition frame missing")
         try SmokeTest.snapshot(EditorView(store: store), size: CGSize(width: 1440, height: 900), to: directory.appendingPathComponent("editor-waveforms.png"))
         try SmokeTest.snapshot(EditorView(store: store), size: CGSize(width: 1040, height: 720), to: directory.appendingPathComponent("editor-compact.png"))
+        print("Timeline: captured real paused preview; starting gapped export")
+        store.player.replaceCurrentItem(with: nil)
         try await exportAndCheckGaps(store.project, directory: directory)
+        print("Timeline: exported gap frames verified; starting native drag")
 
         // Native mouse events use the same canvas implementation as interactive dragging.
         let canvas = TimelineNativeView(frame: NSRect(x: 0, y: 0, width: 1100, height: 230))
@@ -134,12 +142,14 @@ enum TimelineSmokeTest {
         await exporter.export()
         try SmokeTest.require(exporter.status == .completed, exporter.error?.localizedDescription ?? "Gapped export failed")
         let asset = AVURLAsset(url: url)
+        print("Timeline: export completed, reading output duration")
         let duration = try await asset.load(.duration)
         try SmokeTest.require(abs(duration.seconds - 17) < 0.05, "Gapped export duration mismatch")
         let generator = AVAssetImageGenerator(asset: asset)
         generator.requestedTimeToleranceBefore = .zero; generator.requestedTimeToleranceAfter = .zero
         for second in [7.0, 14.0] {
-            let frame = try generator.copyCGImage(at: CMTime(seconds: second, preferredTimescale: 60000), actualTime: nil)
+            print("Timeline: decoding exported frame at \(second)s")
+            let frame = try await generator.image(at: CMTime(seconds: second, preferredTimescale: 60000)).image
             let pixel = NSBitmapImageRep(cgImage: frame).colorAt(x: 100, y: 100)!.usingColorSpace(.deviceRGB)!
             try SmokeTest.require(pixel.redComponent < 0.02 && pixel.greenComponent < 0.02, "Gap/audio-only video segment must be black")
         }

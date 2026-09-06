@@ -11,6 +11,7 @@ final class EditorStore: ObservableObject {
     @Published var selectedCaption: UUID?
     @Published var playhead: Double = 0
     @Published var isPlaying = false
+    @Published private(set) var previewFrame: NSImage?
     @Published var isBuilding = false
     @Published var importing = false
     @Published var exporting = false
@@ -35,6 +36,8 @@ final class EditorStore: ObservableObject {
     private var continuousRecorded = false
     private var buildTask: Task<Void, Never>?
     private var prepared: PreparedTimeline?
+    private var previewTask: Task<Void, Never>?
+    private var previewGenerator: AVAssetImageGenerator?
     private var exportSession: AVAssetExportSession?
     private var timeObserver: Any?
     private var playerStatusObserver: NSKeyValueObservation?
@@ -61,7 +64,9 @@ final class EditorStore: ObservableObject {
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 if time.seconds.isFinite { self.playhead = max(0, time.seconds) }
+                let wasPlaying = self.isPlaying
                 self.isPlaying = self.player.rate != 0
+                if wasPlaying && !self.isPlaying { self.refreshPreviewFrame() }
             }
         }
         if let data = try? Data(contentsOf: recoveryURL), let recovered = try? Project.decode(data),
@@ -291,11 +296,36 @@ final class EditorStore: ObservableObject {
         let time = max(0, min(seconds, project.duration.seconds))
         playhead = time
         player.seek(to: CMTime(seconds: time, preferredTimescale: 60000), toleranceBefore: .zero, toleranceAfter: .zero)
+        if !isPlaying { refreshPreviewFrame() }
+    }
+    /// A bounded, cancellable still from the same compositor used by playback/export.
+    /// Keeps paused scrubbing crisp without retaining a full-resolution frame history.
+    private func refreshPreviewFrame() {
+        previewTask?.cancel(); previewGenerator?.cancelAllCGImageGeneration()
+        guard let prepared, let composition = prepared.videoComposition else { previewFrame = nil; return }
+        let generator = AVAssetImageGenerator(asset: prepared.composition)
+        generator.videoComposition = composition
+        generator.maximumSize = CGSize(width: 1280, height: 1280)
+        generator.requestedTimeToleranceBefore = .zero; generator.requestedTimeToleranceAfter = .zero
+        previewGenerator = generator
+        let time = min(playhead, max(0, project.duration.seconds - 1 / Double(project.fps)))
+        previewTask = Task { [weak self] in
+            do {
+                try await Task.sleep(nanoseconds: 40_000_000)
+                let frame = try await generator.image(at: CMTime(seconds: time, preferredTimescale: 60000)).image
+                try Task.checkCancellation()
+                self?.previewFrame = NSImage(cgImage: frame, size: .zero)
+            } catch { /* AVPlayer remains the fallback for sources without still-frame support. */ }
+        }
     }
     func togglePlayback() {
         guard prepared != nil, !isBuilding else { return }
-        if player.rate != 0 { player.pause(); isPlaying = false }
-        else { if playhead >= project.duration.seconds - 0.02 { seek(0) }; player.play(); isPlaying = true }
+        if player.rate != 0 { player.pause(); isPlaying = false; refreshPreviewFrame() }
+        else {
+            if playhead >= project.duration.seconds - 0.02 { seek(0) }
+            previewTask?.cancel(); previewGenerator?.cancelAllCGImageGeneration()
+            player.play(); isPlaying = true
+        }
     }
     func split() {
         guard let id = selectedClip else { return }
@@ -354,6 +384,7 @@ final class EditorStore: ObservableObject {
     func rebuild() {
         waveforms.load(project.sources)
         buildTask?.cancel(); player.pause(); isPlaying = false; prepared = nil
+        previewTask?.cancel(); previewGenerator?.cancelAllCGImageGeneration(); previewGenerator = nil; previewFrame = nil
         playerStatusObserver = nil; player.replaceCurrentItem(with: nil)
         if project.duration == .zero { isBuilding = false; playhead = 0; return }
         isBuilding = true

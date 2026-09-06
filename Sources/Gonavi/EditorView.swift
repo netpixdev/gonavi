@@ -91,7 +91,7 @@ struct EditorView: View {
                     HStack(alignment: .top, spacing: 10) {
                         Image(systemName: source.isVideo ? "film" : "waveform").foregroundStyle(Theme.accent).frame(width: 22)
                         VStack(alignment: .leading, spacing: 5) {
-                            Text(source.name).font(.system(size: 12, weight: .medium)).lineLimit(2)
+                            Text(source.name).font(.system(size: 12, weight: .medium)).foregroundStyle(Theme.ink).lineLimit(1).truncationMode(.middle)
                             Text(clock(source.duration.seconds)).font(.caption.monospaced()).foregroundStyle(Theme.secondary)
                         }
                         Spacer(minLength: 0)
@@ -156,7 +156,12 @@ struct EditorView: View {
                 } else if !store.hasVideo {
                     AudioPreview(store: store)
                 } else {
-                    PlayerSurface(player: store.player)
+                    ZStack {
+                        PlayerSurface(player: store.player)
+                        if !store.isPlaying, let frame = store.previewFrame {
+                            Image(nsImage: frame).resizable().scaledToFit().allowsHitTesting(false)
+                        }
+                    }
                         .aspectRatio(CGFloat(store.project.scene.width) / CGFloat(store.project.scene.height), contentMode: .fit)
                         .padding(16)
                 }

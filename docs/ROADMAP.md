@@ -1,6 +1,6 @@
 # Gonavi geliştirme planı
 
-## Aşama 0–1: teknik temel — bu teslimat
+## Aşama 0–1: teknik temel — uygulandı
 
 - [x] Swift Package + SwiftUI macOS uygulaması.
 - [x] Referans medya, sahne, klip, müzik, altyazı modeli.
@@ -14,12 +14,26 @@
 
 ## Aşama 2: güvenilir timeline
 
-1. Kaynak-zaman ve sahne-zaman eşleme katmanını genişlet.
-2. Bağlı ses/video, caption anchor, ripple kapsamı ve kilitli katman davranışını belirle.
-3. Çoklu video/audio track, trim tutamakları, snapping, çoklu seçim, boşluklar.
-4. AppKit ile görünür alan çizimi; thumbnail ve waveform cache.
+0.4'te uygulananlar:
+
+- [x] Ana kurgu hattında video ve yalnızca ses klipleri; açık zaman konumları ve klipler arasında boşluklar.
+- [x] Görünür alanla sınırlı AppKit timeline; yatay gezinme, yakınlaştırma, sığdırma ve sürüklerken kenarda otomatik kaydırma.
+- [x] Finder/medya listesinden bırakma ve klip taşımada mıknatıslanma; klip uçları ve oynatma çizgisi hedefleri, geçici `⌥` devre dışı bırakma.
+- [x] Gerçek tepe/RMS dalga formu, kademeli veri ve 256 MB disk önbelleği; video sesi, ses klibi ve müzik hattı.
+- [x] Kliple birlikte içindeki altyazıları taşıma; sınırı aşan altyazıyı parçalara ayırma, ripple silme ve tek adımlık undo.
+- [x] Yalnızca ses projesi oynatma, otomatik altyazı ve M4A export.
+- [x] Eski şema 1 proje konumlarını şema 2'ye geçirme; toplam proje için eski 24 saat sınırını kaldırma.
+
+Timeline'ın çizim alanı proje süresiyle büyümez; bu matematiksel sonsuzluk değildir. Proje başına 10.000 klip/medya, kaynak başına 24 saat, zaman türünün sayısal aralığı ve fiziksel cihaz kaynakları sınırları geçerlidir. Tek ana kurgu ve bağımsız tek müzik hattı korunur; çoklu katman sistemi henüz yoktur.
+
+Kalan işler:
+
+1. Kaynak-zamana bağlı kalıcı altyazı kimliği; hız değişimi ve çoklu katman düzenlemeleri için eşleme katmanını genişlet.
+2. Ayrılabilir bağlı ses/video, kilitli katmanlar ve toplu ripple kapsamı.
+3. Çoklu video/audio track, kenardan trim tutamakları ve çoklu seçim.
+4. Medya thumbnail önbelleği ve stereo kanallar için ayrı dalga görünümü.
 5. Proxy üretimi ve preview kalite ayarı. Export her zaman orijinal medya.
-6. Taşınabilir `.gonavi` paket, medya toplama, şema migration ve yedekler.
+6. Medyayı içine alan taşınabilir `.gonavi` paket ve gelişmiş yedek yönetimi.
 
 Kabul: 30 dakikalık projede kurgu/kayıt/export senkron kalır; kayıp medya yeniden bağlanır; geri alma toplu komutları tek adımda döndürür.
 
@@ -27,12 +41,14 @@ Kabul: 30 dakikalık projede kurgu/kayıt/export senkron kalır; kayıp medya ye
 
 Ücretsiz Türkçe altyazı ve Apple Dikte/API uyumluluğu için [motor kararı](AUTO-CAPTIONS.md) esas alınır. Wispr Flow bağımlılığı yoktur. Intel/Sonoma'da whisper.cpp ana yol; uygun cihazda doğrulanmış Türkçe desteğiyle Apple motoru isteğe bağlıdır.
 
-0.3'te temel otomatik altyazı hattı eklendi: Small/Medium model indirme ve doğrulama, kaynak sesinden Türkçe tanıma, zamanlı önizleme, tek adımda uygulama/geri alma ve SRT/MP4 export. Aşağıdaki VAD, sessizlik temizleme ve kaynak-zamana bağlı kalıcı altyazı eşlemesi işleri devam ediyor; Apple motoru henüz uygulanmadı.
+0.3'te temel otomatik altyazı hattı eklendi: Small/Medium model indirme ve doğrulama, kaynak sesinden Türkçe tanıma, zamanlı önizleme, tek adımda uygulama/geri alma ve SRT/MP4 export. 0.4'te ana hatta yalnızca ses klipleri ve boşluklu yerleşim de desteklenir; üretilen altyazılar klibin timeline konumuna yerleştirilir. Sabit whisper.cpp sürümü, yerel model yönetimi ve temel sessiz-ses kontrolü uygulanmıştır. Görsel dalga formu için tepe/RMS analizi vardır; otomatik konuşma/sessizlik sınıflandırması ve kesim yapmaz. Apple motoru henüz uygulanmadı.
 
-1. PCM çıkarma, RMS analizi, konuşma algılama adaptörü.
+Kalan işler:
+
+1. Mevcut PCM çıkarma ve temel ses kontrolü üzerine konuşma algılama/VAD adaptörü.
 2. Minimum sessizlik, başlangıç/son payı ve kesim önizlemesi.
 3. Bağlı katmanlarda otomatik kesim; müzik için sürekli tut/kes seçimi.
-4. Sabitlenmiş whisper.cpp sürümü ve yerel model yöneticisi.
+4. Model indirmesine kesintiden devam ve Türkçe kayıtlarla model karşılaştırması.
 5. Türkçe/İngilizce test seti, cümle/kelime zamanları, elle düzeltmeyi koruma.
 6. Kaynak-zamana bağlı altyazı; kesim ve hızla birlikte yeniden eşleme.
 7. Sürümlü özel altyazı şablonları, VTT, kelime vurgusu.
@@ -54,12 +70,16 @@ Keyframe/easing, crop tutamakları, hız, freeze frame, geçişler, renk ayarı,
 - Yapay zekâ/analiz UI'dan bağımsızdır; ilerleme/iptal zorunludur.
 - Intel ve Apple Silicon ayrı paketlerdir; minimum macOS 14 Sonoma. İki mimaride bağımsız CI doğrulaması yapılır.
 - Her aşama başarılı CI ve fiziksel Mac kabul testiyle kapanır.
-- İlk aşamadaki timeline-anchored altyazılar ve tek track, tam ürün mimarisinin yerine geçmez; migration ile genişletilir.
+- Şema 2'de boşluklu klip konumları ve taşıma/ripple sırasında altyazı eşlemesi vardır. Altyazılar hâlâ timeline'a bağlıdır; kalıcı kaynak bağları ve çoklu katman için model genişletilir.
 
 ## İlk Mac kabul testi
 
 - [ ] İndirilen ad-hoc uygulama Applications klasöründen açılıyor.
 - [ ] İki video ve bir ses birlikte sürükle bırak ile yükleniyor.
+- [ ] Video/ses dalgasında sessiz, düşük ve güçlü bölümler ayırt ediliyor; müzik dalgası da görünüyor.
+- [ ] Boşluğa taşıma, yakın kenara mıknatıslanma, `⌥` ile geçici kapatma ve tek undo çalışıyor.
+- [ ] Uzun projede kaydırma, sığdırma ve sürüklerken otomatik kaydırma akıcı.
+- [ ] Yalnızca ses dosyasıyla oynatma, Türkçe altyazı ve M4A export çalışıyor.
 - [ ] Play/pause, kare ilerleme ve zaman cetvelinde seek çalışıyor.
 - [ ] Böl/sil/undo/redo sonrası süre ve görüntü beklenen şekilde.
 - [ ] Dikey sahne, crop, zoom ve altyazı preview/export tutarlı.

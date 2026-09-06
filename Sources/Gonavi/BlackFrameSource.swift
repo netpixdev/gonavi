@@ -11,10 +11,10 @@ actor BlackFrameSource {
             let url = FileManager.default.temporaryDirectory.appendingPathComponent("gonavi-black-\(UUID().uuidString).mov")
             let writer = try AVAssetWriter(outputURL: url, fileType: .mov)
             let input = AVAssetWriterInput(mediaType: .video, outputSettings: [AVVideoCodecKey: AVVideoCodecType.h264,
-                                                                             AVVideoWidthKey: 16, AVVideoHeightKey: 16])
+                                                                             AVVideoWidthKey: 320, AVVideoHeightKey: 180])
             let adaptor = AVAssetWriterInputPixelBufferAdaptor(assetWriterInput: input, sourcePixelBufferAttributes: [
                 kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32ARGB,
-                kCVPixelBufferWidthKey as String: 16, kCVPixelBufferHeightKey as String: 16])
+                kCVPixelBufferWidthKey as String: 320, kCVPixelBufferHeightKey as String: 180])
             writer.add(input)
             guard writer.startWriting() else { throw writer.error ?? ProjectError.invalid("Boş kare oluşturulamadı.") }
             writer.startSession(atSourceTime: .zero)
@@ -30,7 +30,7 @@ actor BlackFrameSource {
             CVPixelBufferLockBaseAddress(buffer, [])
             if let base = CVPixelBufferGetBaseAddress(buffer) {
                 memset(base, 0, CVPixelBufferGetDataSize(buffer))
-                for y in 0..<16 { for x in 0..<16 { base.storeBytes(of: UInt8(255), toByteOffset: y * CVPixelBufferGetBytesPerRow(buffer) + x * 4, as: UInt8.self) } }
+                for y in 0..<180 { for x in 0..<320 { base.storeBytes(of: UInt8(255), toByteOffset: y * CVPixelBufferGetBytesPerRow(buffer) + x * 4, as: UInt8.self) } }
             }
             CVPixelBufferUnlockBaseAddress(buffer, [])
             guard adaptor.append(buffer, withPresentationTime: .zero) else { throw writer.error ?? ProjectError.invalid("Boş kare eklenemedi.") }
