@@ -29,6 +29,8 @@ struct TimelinePanel: View {
                     Label("Mıknatıs", systemImage: "point.topleft.down.to.point.bottomright.curvepath")
                         .foregroundStyle(viewport.snapping ? Theme.accent : Theme.secondary)
                 }.help("Klip uçlarına ve oynatma çizgisine hizala · S · ⌥ ile geçici kapat")
+                Button(action: store.automaticSilences) { Label("Sessizlik", systemImage: "waveform.path") }
+                    .help("Sessiz alanları analiz et, dinle ve seçerek çıkar").disabled(store.project.clips.isEmpty || !store.editable)
                 Spacer()
                 Button { viewport.reveal(store.playhead) } label: { Image(systemName: "scope") }.help("Oynatma çizgisini göster")
                 Button { viewport.fit(store.project.duration.seconds) } label: { Text("Sığdır") }

@@ -23,6 +23,7 @@ final class EditorStore: ObservableObject {
     @Published var showingHome = true
     @Published var creatingProject = false
     @Published var showingAutoCaptions = false
+    @Published var showingSilences = false
     @Published private(set) var hasOpenProject = false
     @Published private(set) var recoveryAvailable = false
     @Published private(set) var recentProjects: [RecentProject] = []
@@ -47,7 +48,7 @@ final class EditorStore: ObservableObject {
     var canUndo: Bool { !undoStack.isEmpty }
     var canRedo: Bool { !redoStack.isEmpty }
     var activeClip: VideoClip? { project.clips.first { $0.id == selectedClip } }
-    var editable: Bool { !importing && !exporting && !showingAutoCaptions }
+    var editable: Bool { !importing && !exporting && !showingAutoCaptions && !showingSilences }
     var hasVideo: Bool { project.clips.contains { clip in project.sources.contains { $0.id == clip.sourceID && $0.isVideo } } }
     var canExport: Bool { project.duration > .zero && prepared != nil && !isBuilding && editable }
 
@@ -368,6 +369,25 @@ final class EditorStore: ObservableObject {
     func automaticCaptions() {
         guard editable, !project.clips.isEmpty else { return }
         player.pause(); isPlaying = false; showingHome = false; showingAutoCaptions = true
+    }
+    func automaticSilences() {
+        guard editable, !project.clips.isEmpty else { return }
+        player.pause(); isPlaying = false; continuousEdit = false; continuousRecorded = false
+        showingHome = false; showingSilences = true
+    }
+    func applySilences(_ candidates: [SilenceCandidate], expectedRevision: Int) throws {
+        guard showingSilences, !importing, !exporting, !showingAutoCaptions, expectedRevision == revision else {
+            throw ProjectError.invalid("Kurgu analizden sonra değişti. Sessizlikleri yeniden analiz edin.")
+        }
+        guard !candidates.isEmpty else { return }
+        var next = project
+        try next.removeSilences(candidates)
+        let removed = project.duration.seconds - next.duration.seconds
+        showingSilences = false
+        mutate { $0 = next }
+        if !project.clips.contains(where: { $0.id == selectedClip }) { selectedClip = project.clips.first?.id }
+        if !project.captions.contains(where: { $0.id == selectedCaption }) { selectedCaption = nil }
+        status = String(format: "%d sessiz alan çıkarıldı · %.2f sn kısaldı · ⌘Z ile geri alınabilir.", candidates.count, removed)
     }
     func applyGeneratedCaptions(_ captions: [Caption]) {
         guard showingAutoCaptions, !captions.isEmpty else { return }

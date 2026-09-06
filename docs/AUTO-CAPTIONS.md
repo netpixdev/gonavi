@@ -1,6 +1,6 @@
 # Ücretsiz Türkçe otomatik altyazı — motor kararı
 
-Motor araştırması: 5 Eylül 2026. Uygulama durumu: 0.4, 6 Eylül 2026. Kullanıcı hedefi Intel MacBook, macOS Sonoma 14 veya üzeri; Apple Silicon paketi de korunur.
+Motor araştırması: 5 Eylül 2026. Uygulama durumu: 0.5, 6 Eylül 2026. Kullanıcı hedefi Intel MacBook, macOS Sonoma 14 veya üzeri; Apple Silicon paketi de korunur.
 
 ## Karar
 
@@ -27,7 +27,9 @@ Small seçimi Intel için boyut/bellek/doğruluk dengesi kararıdır; her Türk�
 
 0.4'te klip içindeki altyazılar klip taşınırken birlikte taşınır; klip sınırını aşan altyazı bölünür ve aynı metin parçalarda korunur. Ripple silme zamanları yeniden eşler. Bu davranış kalıcı kaynak-zaman bağları veya kelime düzeyinde yeniden bölme değildir; taşıma sonrası sonuç gözden geçirilmelidir.
 
-Henüz olmayanlar: VAD, otomatik sessizlik kesme, kelime vurgusu, güven skoru arayüzü, kalıcı kaynak-zaman bağları ve kesintili indirmeye kaldığı yerden devam. Gerçek tepe/RMS dalga formu video, ana ses klibi ve müzikte ses seviyelerini gösterir; konuşma sınıflandırıcısı değildir ve kendiliğinden kesim yapmaz. Bozuk model arayüzden kaldırılıp yeniden indirilebilir. Beş dakikalık parça sınırlarında konuşma bağlamı kesilebilir.
+0.5'te ayrı bir ses seviyesine göre sessizlik temizleme akışı vardır: seçili klip/tüm kurgu → eşik (varsayılan −38 dBFS, −60…−20) → minimum sessizlik (0,5 sn) ve kenar payı (0,12 sn) → ilerleme/iptal → kesimleri dinle ve seç → tek undo ile uygula. Orijinal klip sesi ve kısa ses tepelerini koruyan kontrol kullanılır. Altyazı zamanları kaldırılan aralıklara göre yeniden eşlenir; ek müzik kesilip birleştirilmeden yeni proje süresiyle sınırlanır. Bu analiz ücretsiz ve cihazda çalışır, Whisper modeli gerektirmez. Transkripsiyon akışına otomatik VAD eklendiği anlamına gelmez.
+
+Henüz olmayanlar: konuşma algılama/VAD, kelime vurgusu, güven skoru arayüzü, kalıcı kaynak-zaman bağları ve kesintili indirmeye kaldığı yerden devam. Gerçek tepe/RMS dalga formu video, ana ses klibi ve müzikte ses seviyelerini gösterir; konuşma sınıflandırıcısı değildir. Ses eşiği düşük sesli sözcükleri yanlış aday gösterebileceği için kesimler dinlenmelidir; gerçek Intel Mac kabul testi hâlâ gereklidir. Bozuk model arayüzden kaldırılıp yeniden indirilebilir. Beş dakikalık parça sınırlarında konuşma bağlamı kesilebilir.
 
 ## Apple Dikte ile API arasındaki fark
 

@@ -37,6 +37,12 @@ struct GonaviApp: App {
                 Button("Geri Al", action: store.undo).keyboardShortcut("z").disabled(!store.canUndo || !store.editable)
                 Button("Yinele", action: store.redo).keyboardShortcut("z", modifiers: [.command, .shift]).disabled(!store.canRedo || !store.editable)
             }
+            CommandMenu("Kurgu") {
+                Button("Sessizlikleri Temizle…", action: store.automaticSilences)
+                    .disabled(store.project.clips.isEmpty || !store.editable)
+                Button("Otomatik Altyazı…", action: store.automaticCaptions)
+                    .disabled(store.project.clips.isEmpty || !store.editable)
+            }
         }
     }
 }

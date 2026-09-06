@@ -107,6 +107,8 @@ enum TimelineSmokeTest {
         let exporter = AVAssetExportSession(asset: prepared.composition, presetName: AVAssetExportPresetAppleM4A)!
         exporter.audioMix = prepared.audioMix; exporter.outputURL = directory.appendingPathComponent("audio-only.m4a"); exporter.outputFileType = .m4a
         await exporter.export(); try SmokeTest.require(exporter.status == .completed, "Audio-only M4A export failed")
+        try await SilenceSmokeTest.run(directory: directory.deletingLastPathComponent().appendingPathComponent("silence"),
+                                       movieURL: movieURL, audioURL: audioURL, silentVideoURL: picture)
         let report = "PASS: real video/audio peak+RMS decoding; silence, quiet and loud levels; source waveform cache; native mouse drag and undo; virtual viewport at 200000s; gapped video/audio MP4 frames; audio-only import, preview, M4A export; full/compact SwiftUI screenshots.\n"
         try report.write(to: directory.appendingPathComponent("timeline-report.txt"), atomically: true, encoding: .utf8)
     }

@@ -1,6 +1,6 @@
 # Gonavi
 
-SwiftUI tabanlı, yerel çalışan macOS video editörü. **0.4 teknik önizleme**; CapCut kapsamındaki tam ürün henüz tamamlanmadı.
+SwiftUI tabanlı, yerel çalışan macOS video editörü. **0.5 teknik önizleme**; CapCut kapsamındaki tam ürün henüz tamamlanmadı.
 
 ## İndir ve çalıştır
 
@@ -19,6 +19,7 @@ SwiftUI tabanlı, yerel çalışan macOS video editörü. **0.4 teknik önizleme
 - Video/ses dosyası içe aktarma ve Finder'dan toplu sürükle bırak.
 - Bir ana kurgu hattında video ve ses klipleri; bölme, ripple silme, boşluk bırakarak taşıma ve yakın kenarlara mıknatıslanma.
 - Video ve yalnızca ses dosyalarında gerçek tepe/RMS dalga formu; sessizlik, düşük ses ve güçlü ses bölgeleri aynı ölçekte görünür.
+- Ses seviyesine göre otomatik sessizlik önerileri; seçili klip veya tüm kurgu analizi, kesimleri dinleme/seçme ve tek işlemde uygulama/geri alma.
 - Görünen bölümü çizen AppKit timeline; yatay kaydırma, yakınlaştırma, sığdırma ve sürükleme sırasında kenarda otomatik kaydırma.
 - Yalnızca ses dosyasıyla kurgu, oynatma, otomatik altyazı ve M4A dışa aktarma.
 - 9:16, 16:9, 1:1, 4:5 sahneleri; 24/25/30/60 fps.
@@ -44,6 +45,16 @@ Finder'dan timeline'a veya medya listesine dosya bırakılabilir. Medya listesin
 
 Dalga formunun dış kısmı tepeyi, iç kısmı RMS seviyesini gösterir. Ortak karekök gösterim ölçeği düşük sesleri görünür kılar; dosyalar ayrı ayrı normalize edilmez. Sıfıra yakın ses düz çizgi olur, yüksek tepe genişler; tam ölçeğe yaklaşan tepe turuncudur. Bu bir LUFS veya konuşma/sessizlik sınıflandırıcısı değildir. Stereo kanallar birbirini söndürmez: tepe kanalların maksimumu, RMS kanal enerjilerinin ortalamasıdır. Kaynakta ses hattı yoksa **Ses hattı yok**, analiz sürüyorsa ayrı yükleme durumu gösterilir. Önbellek `~/Library/Caches/Gonavi/Waveforms` içindedir (disk bütçesi 256 MB); dosya değişince veya **Dalga Formunu Yeniden Oku** ile yenilenir.
 
+## Ücretsiz sessizlik temizleme
+
+**Sessizlik temizleme** penceresinde **Seçili klip** veya **Tüm kurgu** kapsamını seç. Varsayılan eşik **−38 dBFS**; **−60 ile −20 dBFS** arasında ayarlanabilir. Minimum sessiz süre **0,5 saniye**, konuşma kenarlarında bırakılan pay **0,12 saniye** ile başlar. Daha yüksek eşik, daha fazla düşük sesli bölgenin aday olmasına yol açabilir; kesimleri dinleyerek karar ver.
+
+Analiz, ana kurgu hattındaki video/ses kliplerinin orijinal ses seviyesini ve kısa ses tepelerini koruyan ek kontrolü kullanır. Klip ses seviyesi ayarı ve ayrı müzik hattı analize dahil edilmez. Bütün işlem bu Mac'te yapılır; ücret, hesap, model indirme veya internet gerekmez. İlerleme gösterilir ve analiz iptal edilebilir.
+
+Önerilen kesimler önce listelenir: her birini dinleyebilir, seçimini kaldırabilir ve yalnızca seçtiklerini uygulayabilirsin. Uygulama sonraki klip ve altyazı zamanlarını kaldırılan süreye göre kaydırır; tek `⌘Z` bütün işlemi geri alır. Ek müzik kesilip birleştirilmez; yeni proje süresiyle sınırlı olarak kesintisiz çalar ve döngüye alınmaz. Kaynak dosyalar değiştirilmez.
+
+Bu araç **ses seviyesine dayalıdır; konuşma algılama/VAD değildir**. Fısıltı, düşük sesli sözcük veya ortam sesi eşik altında kalabilir; gerçek kayıtlarında önerileri kontrol et. 0.5 için fiziksel Mac üzerinde dinleme ve etkileşim kabul testi hâlâ gereklidir.
+
 ## Ücretsiz otomatik Türkçe altyazı
 
 Editörde **Altyazı → Otomatik Altyazı** seç. Varsayılan **Dengeli** model (çok dilli Whisper Small Q5_1, 190 MB), Intel Mac için başlangıç seçimidir. **Daha yüksek doğruluk** (Medium Q5_0, 539 MB) zor konuşmalarda yardımcı olabilir; daha çok bellek ve işlem süresi ister. Bu seçim bir Türkçe doğruluk karşılaştırması sonucu değildir; fiziksel cihaz ve kendi videolarınla değerlendirilmelidir.
@@ -54,7 +65,7 @@ Ana kurgu hattındaki video ve ses kliplerinin orijinal sesi kullanılır; ek m�
 
 ## Sınırlar
 
-- Otomatik sessizlik temizleme, kelime vurgulu animasyon, özel şablon içe aktarma, çoklu video katmanları, keyframe ve proxy henüz uygulanmadı. [Yol haritası](docs/ROADMAP.md).
+- Kelime vurgulu animasyon, özel şablon içe aktarma, çoklu video katmanları, keyframe ve proxy henüz uygulanmadı. Ses seviyesine göre sessizlik temizleme vardır; gerçek konuşma algılama/VAD henüz yoktur. [Yol haritası](docs/ROADMAP.md).
 - Otomatik altyazının yazım ve zaman kodları kontrol edilmelidir. Müzik, gürültü ve uzun sessizliklerde yanlış metin üretilebilir. Temel sessiz-ses kontrolü vardır; tam konuşma algılama/VAD henüz yoktur. Uzun klipler 5 dakikalık parçalara ayrılır; parça sınırındaki sözcükler düzeltme gerektirebilir. Apple Speech motoru henüz eklenmedi.
 - Kırpma bu aşamada böl + sil ile yapılır; kenardan sürükleyerek trim henüz yok.
 - `.gonavi` şu anda bir JSON dosyasıdır; medya dosyalarını içine kopyalayan taşınabilir paket henüz yok. Kaynak medya dosyalarını sakla.

@@ -41,6 +41,7 @@ struct EditorView: View {
         .onChange(of: store.selectedClip) { _, selected in if selected != nil { inspectorTab = 1 } }
         .onChange(of: store.selectedCaption) { _, selected in if selected != nil { inspectorTab = 2 } }
         .sheet(isPresented: $store.showingAutoCaptions) { AutoCaptionView(store: store) }
+        .sheet(isPresented: $store.showingSilences) { SilenceView(store: store) }
         .sheet(isPresented: Binding(get: { store.exporting }, set: { _ in })) {
             VStack(alignment: .leading, spacing: 20) {
                 Text(store.hasVideo ? "Video hazırlanıyor" : "Ses hazırlanıyor").font(.title2.bold())

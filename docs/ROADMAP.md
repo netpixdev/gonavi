@@ -41,13 +41,15 @@ Kabul: 30 dakikalık projede kurgu/kayıt/export senkron kalır; kayıp medya ye
 
 Ücretsiz Türkçe altyazı ve Apple Dikte/API uyumluluğu için [motor kararı](AUTO-CAPTIONS.md) esas alınır. Wispr Flow bağımlılığı yoktur. Intel/Sonoma'da whisper.cpp ana yol; uygun cihazda doğrulanmış Türkçe desteğiyle Apple motoru isteğe bağlıdır.
 
-0.3'te temel otomatik altyazı hattı eklendi: Small/Medium model indirme ve doğrulama, kaynak sesinden Türkçe tanıma, zamanlı önizleme, tek adımda uygulama/geri alma ve SRT/MP4 export. 0.4'te ana hatta yalnızca ses klipleri ve boşluklu yerleşim de desteklenir; üretilen altyazılar klibin timeline konumuna yerleştirilir. Sabit whisper.cpp sürümü, yerel model yönetimi ve temel sessiz-ses kontrolü uygulanmıştır. Görsel dalga formu için tepe/RMS analizi vardır; otomatik konuşma/sessizlik sınıflandırması ve kesim yapmaz. Apple motoru henüz uygulanmadı.
+0.3'te temel otomatik altyazı hattı eklendi: Small/Medium model indirme ve doğrulama, kaynak sesinden Türkçe tanıma, zamanlı önizleme, tek adımda uygulama/geri alma ve SRT/MP4 export. 0.4'te ana hatta yalnızca ses klipleri ve boşluklu yerleşim de desteklenir; üretilen altyazılar klibin timeline konumuna yerleştirilir. Sabit whisper.cpp sürümü, yerel model yönetimi ve temel sessiz-ses kontrolü uygulanmıştır. Görsel dalga formu için tepe/RMS analizi vardır. Apple motoru henüz uygulanmadı.
+
+0.5 kapsamı: ses seviyesine göre sessizlik temizleme. Seçili klip veya tüm kurgu, varsayılan −38 dBFS eşik (−60…−20), en az 0,5 saniye sessizlik ve 0,12 saniye kenar payı ile analiz edilir. Orijinal klip sesi ve kısa ses tepelerini koruyan kontrol kullanılır. Analiz ilerleme/iptal sunar; önerilen kesimler dinlenip seçilir, yalnızca seçilenler tek undo işlemiyle uygulanır. Sonraki klipler ve altyazılar kaldırılan zamana göre kaydırılır; ek müzik kesilip birleştirilmeden yeni proje süresiyle sınırlanır. Analiz yereldir, ücretsizdir ve model istemez. Bu ses eşiği yöntemidir; konuşma algılama/VAD henüz yoktur. 0.5'in CI ve fiziksel Mac kabul sonuçları ayrıca doğrulanmalıdır.
 
 Kalan işler:
 
 1. Mevcut PCM çıkarma ve temel ses kontrolü üzerine konuşma algılama/VAD adaptörü.
-2. Minimum sessizlik, başlangıç/son payı ve kesim önizlemesi.
-3. Bağlı katmanlarda otomatik kesim; müzik için sürekli tut/kes seçimi.
+2. Ses eşiğine dayalı önerileri gerçek konuşma kayıtlarıyla iyileştirme; düşük sesli sözcükler ve gürültüde kabul testi.
+3. Çoklu bağlı katmanlarda otomatik kesim; mevcut sürekli müzik davranışına ek olarak müziği kesme seçimi.
 4. Model indirmesine kesintiden devam ve Türkçe kayıtlarla model karşılaştırması.
 5. Türkçe/İngilizce test seti, cümle/kelime zamanları, elle düzeltmeyi koruma.
 6. Kaynak-zamana bağlı altyazı; kesim ve hızla birlikte yeniden eşleme.
@@ -80,6 +82,9 @@ Keyframe/easing, crop tutamakları, hız, freeze frame, geçişler, renk ayarı,
 - [ ] Boşluğa taşıma, yakın kenara mıknatıslanma, `⌥` ile geçici kapatma ve tek undo çalışıyor.
 - [ ] Uzun projede kaydırma, sığdırma ve sürüklerken otomatik kaydırma akıcı.
 - [ ] Yalnızca ses dosyasıyla oynatma, Türkçe altyazı ve M4A export çalışıyor.
+- [ ] Seçili klip/tüm kurgu sessizlik analizi, iptal ve önerilen kesimleri dinleme çalışıyor.
+- [ ] Eşik, minimum sessizlik ve kenar payı düşük sesli sözcükleri koruyacak şekilde değerlendiriliyor.
+- [ ] Seçilen sessizlik kesimleri tek undo ile geri geliyor; altyazı eşlemesi ve sürekli müzik export ile tutarlı.
 - [ ] Play/pause, kare ilerleme ve zaman cetvelinde seek çalışıyor.
 - [ ] Böl/sil/undo/redo sonrası süre ve görüntü beklenen şekilde.
 - [ ] Dikey sahne, crop, zoom ve altyazı preview/export tutarlı.
