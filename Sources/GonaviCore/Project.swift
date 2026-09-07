@@ -35,10 +35,37 @@ public struct MediaSource: Codable, Identifiable, Equatable, Sendable {
     public var bookmark: Data?
     public var duration: EditTime
     public var isVideo: Bool
+    public var isStillImage: Bool
+    public var isVisual: Bool { isVideo || isStillImage }
+    public var defaultClipDuration: EditTime { isStillImage ? EditTime(seconds: 5) : duration }
     public init(id: UUID = UUID(), name: String, path: String, bookmark: Data? = nil,
-                duration: EditTime, isVideo: Bool) {
+                duration: EditTime, isVideo: Bool, isStillImage: Bool = false) {
         self.id = id; self.name = name; self.path = path; self.bookmark = bookmark
-        self.duration = duration; self.isVideo = isVideo
+        self.duration = duration; self.isVideo = isVideo; self.isStillImage = isStillImage
+    }
+    private enum CodingKeys: String, CodingKey {
+        case id, name, path, bookmark, duration, isVideo, isStillImage
+    }
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        id = try values.decode(UUID.self, forKey: .id)
+        name = try values.decode(String.self, forKey: .name)
+        path = try values.decode(String.self, forKey: .path)
+        bookmark = try values.decodeIfPresent(Data.self, forKey: .bookmark)
+        duration = try values.decode(EditTime.self, forKey: .duration)
+        isVideo = try values.decode(Bool.self, forKey: .isVideo)
+        isStillImage = try values.decodeIfPresent(Bool.self, forKey: .isStillImage) ?? false
+    }
+}
+
+/// Fractions removed from each original image edge before the clip transform.
+public struct ClipCrop: Codable, Equatable, Sendable {
+    public var left: Double
+    public var top: Double
+    public var right: Double
+    public var bottom: Double
+    public init(left: Double = 0, top: Double = 0, right: Double = 0, bottom: Double = 0) {
+        self.left = left; self.top = top; self.right = right; self.bottom = bottom
     }
 }
 
@@ -50,11 +77,32 @@ public struct VideoClip: Codable, Identifiable, Equatable, Sendable {
     public var timelineStart: EditTime? = nil
     public var duration: EditTime
     public var zoom: Double = 1
+    /// Counterclockwise degrees, matching the Core Image renderer.
+    public var rotation: Double = 0
+    public var crop = ClipCrop()
     public var offsetX: Double = 0
     public var offsetY: Double = 0
     public var fill: Bool = false
     public var volume: Double = 1
     public init(sourceID: UUID, duration: EditTime) { self.sourceID = sourceID; self.duration = duration }
+    private enum CodingKeys: String, CodingKey {
+        case id, sourceID, sourceStart, timelineStart, duration, zoom, rotation, crop, offsetX, offsetY, fill, volume
+    }
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        id = try values.decode(UUID.self, forKey: .id)
+        sourceID = try values.decode(UUID.self, forKey: .sourceID)
+        sourceStart = try values.decode(EditTime.self, forKey: .sourceStart)
+        timelineStart = try values.decodeIfPresent(EditTime.self, forKey: .timelineStart)
+        duration = try values.decode(EditTime.self, forKey: .duration)
+        zoom = try values.decode(Double.self, forKey: .zoom)
+        rotation = try values.decodeIfPresent(Double.self, forKey: .rotation) ?? 0
+        crop = try values.decodeIfPresent(ClipCrop.self, forKey: .crop) ?? ClipCrop()
+        offsetX = try values.decode(Double.self, forKey: .offsetX)
+        offsetY = try values.decode(Double.self, forKey: .offsetY)
+        fill = try values.decode(Bool.self, forKey: .fill)
+        volume = try values.decode(Double.self, forKey: .volume)
+    }
 }
 
 public struct MusicClip: Codable, Equatable, Sendable {
@@ -84,7 +132,7 @@ public enum ProjectError: LocalizedError {
 }
 
 public struct Project: Codable, Equatable, Sendable {
-    public var schemaVersion: Int = 2
+    public var schemaVersion: Int = 3
     public var name: String = "Yeni proje"
     public var scene: ScenePreset = .portrait
     public var fps: Int = 30
@@ -125,7 +173,7 @@ public struct Project: Codable, Equatable, Sendable {
             let left = $0.element.timelineStart!, right = $1.element.timelineStart!
             return left == right ? $0.offset < $1.offset : left < right
         }.map(\.element)
-        schemaVersion = 2
+        schemaVersion = 3
     }
 
     /// Choose the nearest free placement; ties prefer the earlier gap. This never overwrites a clip.
@@ -163,7 +211,7 @@ public struct Project: Codable, Equatable, Sendable {
     public mutating func appendSourceToTimeline(source: MediaSource, at time: EditTime? = nil) -> UUID {
         normalizeTimeline()
         if !sources.contains(where: { $0.id == source.id }) { sources.append(source) }
-        var clip = VideoClip(sourceID: source.id, duration: source.duration)
+        var clip = VideoClip(sourceID: source.id, duration: source.defaultClipDuration)
         let end = clips.last.map { ($0.timelineStart ?? .zero) + $0.duration } ?? .zero
         clip.timelineStart = resolvedPlacement(at: time ?? end, duration: clip.duration)
         clips.append(clip); normalizeTimeline()
@@ -211,7 +259,7 @@ public struct Project: Codable, Equatable, Sendable {
         func check(_ test: Bool, _ message: String) throws {
             if !test { throw ProjectError.invalid(message) }
         }
-        try check([1, 2].contains(schemaVersion), "Bu proje sürümü desteklenmiyor.")
+        try check([1, 2, 3].contains(schemaVersion), "Bu proje sürümü desteklenmiyor.")
         try check([24, 25, 30, 60].contains(fps), "Geçersiz kare hızı.")
         try check(sources.count <= 10_000 && clips.count <= 10_000 && captions.count <= 100_000,
                   "Proje öğe sınırını aşıyor.")
@@ -220,6 +268,7 @@ public struct Project: Codable, Equatable, Sendable {
         try check(Set(captions.map(\.id)).count == captions.count, "Tekrarlanan altyazı kimliği.")
         for source in sources {
             try check(source.duration.ticks > 0 && source.duration.seconds <= 86400, "Geçersiz medya süresi.")
+            try check(!(source.isVideo && source.isStillImage), "Medya aynı anda video ve fotoğraf olamaz.")
         }
         var total: Int64 = 0, previousEnd: Int64 = 0
         for clip in clips {
@@ -230,10 +279,15 @@ public struct Project: Codable, Equatable, Sendable {
                       && clip.sourceStart.ticks <= source.duration.ticks
                       && clip.duration.ticks <= source.duration.ticks - clip.sourceStart.ticks,
                       "Klip kaynak süresinin dışında.")
-            try check(clip.zoom.isFinite && (1...4).contains(clip.zoom)
-                      && clip.offsetX.isFinite && (-1...1).contains(clip.offsetX)
-                      && clip.offsetY.isFinite && (-1...1).contains(clip.offsetY)
+            try check(clip.zoom.isFinite && (0.05...8).contains(clip.zoom)
+                      && clip.offsetX.isFinite && (-4...4).contains(clip.offsetX)
+                      && clip.offsetY.isFinite && (-4...4).contains(clip.offsetY)
+                      && clip.rotation.isFinite && (-180...180).contains(clip.rotation)
                       && clip.volume.isFinite && (0...2).contains(clip.volume), "Geçersiz klip ayarı.")
+            let crop = clip.crop
+            try check([crop.left, crop.top, crop.right, crop.bottom].allSatisfy { $0.isFinite && (0...0.95).contains($0) }
+                      && crop.left + crop.right <= 0.95 + 1e-12 && crop.top + crop.bottom <= 0.95 + 1e-12,
+                      "Kırpma değerleri görüntünün en az yüzde 5'ini bırakmalı.")
             let start = clip.timelineStart?.ticks ?? previousEnd
             try check(start >= 0 && start >= previousEnd && start <= Int64.max - clip.duration.ticks,
                       "Klipler çakışamaz ve zaman çizelgesinde sıralı olmalı.")
@@ -242,6 +296,7 @@ public struct Project: Codable, Equatable, Sendable {
         }
         if let music {
             try check(sources.contains { $0.id == music.sourceID }, "Müzik kaynağı bulunamadı.")
+            try check(!sources.contains { $0.id == music.sourceID && $0.isStillImage }, "Fotoğraf müzik olarak kullanılamaz.")
             try check(music.volume.isFinite && (0...2).contains(music.volume), "Geçersiz müzik seviyesi.")
             if clips.isEmpty { total = sources.first(where: { $0.id == music.sourceID })!.duration.ticks }
         }
@@ -308,7 +363,7 @@ public struct Project: Codable, Equatable, Sendable {
         guard data.count <= 32 * 1024 * 1024 else { throw ProjectError.invalid("Proje dosyası çok büyük.") }
         var project = try JSONDecoder().decode(Self.self, from: data)
         try project.validate()
-        if project.schemaVersion == 1 { project.normalizeTimeline() }
+        if project.schemaVersion < 3 { project.normalizeTimeline() }
         return project
     }
     public func srt() -> String {

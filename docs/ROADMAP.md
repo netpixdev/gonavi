@@ -43,7 +43,7 @@ Kabul: 30 dakikalık projede kurgu/kayıt/export senkron kalır; kayıp medya ye
 
 0.3'te temel otomatik altyazı hattı eklendi: Small/Medium model indirme ve doğrulama, kaynak sesinden Türkçe tanıma, zamanlı önizleme, tek adımda uygulama/geri alma ve SRT/MP4 export. 0.4'te ana hatta yalnızca ses klipleri ve boşluklu yerleşim de desteklenir; üretilen altyazılar klibin timeline konumuna yerleştirilir. Sabit whisper.cpp sürümü, yerel model yönetimi ve temel sessiz-ses kontrolü uygulanmıştır. Görsel dalga formu için tepe/RMS analizi vardır. Apple motoru henüz uygulanmadı.
 
-0.5 kapsamı: ses seviyesine göre sessizlik temizleme. Seçili klip veya tüm kurgu, varsayılan −38 dBFS eşik (−60…−20), en az 0,5 saniye sessizlik ve 0,12 saniye kenar payı ile analiz edilir. Orijinal klip sesi ve kısa ses tepelerini koruyan kontrol kullanılır. Analiz ilerleme/iptal sunar; önerilen kesimler dinlenip seçilir, yalnızca seçilenler tek undo işlemiyle uygulanır. Sonraki klipler ve altyazılar kaldırılan zamana göre kaydırılır; ek müzik kesilip birleştirilmeden yeni proje süresiyle sınırlanır. Analiz yereldir, ücretsizdir ve model istemez. Bu ses eşiği yöntemidir; konuşma algılama/VAD henüz yoktur. 0.5'in CI ve fiziksel Mac kabul sonuçları ayrıca doğrulanmalıdır.
+0.5 kapsamı: ses seviyesine göre sessizlik temizleme. Seçili klip veya tüm kurgu, varsayılan −38 dBFS eşik (−60…−20), en az 0,5 saniye sessizlik ve 0,12 saniye kenar payı ile analiz edilir. Orijinal klip sesi ve kısa ses tepelerini koruyan kontrol kullanılır. Analiz ilerleme/iptal sunar; önerilen kesimler dinlenip seçilir, yalnızca seçilenler tek undo işlemiyle uygulanır. Sonraki klipler ve altyazılar kaldırılan zamana göre kaydırılır; ek müzik kesilip birleştirilmeden yeni proje süresiyle sınırlanır. Analiz yereldir, ücretsizdir ve model istemez. Bu ses eşiği yöntemidir; konuşma algılama/VAD henüz yoktur. Fiziksel Mac üzerinde gerçek kayıtlarla dinleme ve etkileşim kabulü hâlâ gereklidir.
 
 Kalan işler:
 
@@ -59,7 +59,18 @@ Kabul: 10 dakikalık konuşma videosunu sessizlik temizle → düzelt → altyaz
 
 ## Aşama 4: yaratıcı araçlar
 
-Keyframe/easing, crop tutamakları, hız, freeze frame, geçişler, renk ayarı, EQ/compressor/limiter, ducking. Daha sonra LUT, maske/chroma key ve gelişmiş denoise.
+0.6 kapsamı:
+
+- [x] JPEG, PNG, HEIC ve TIFF fotoğrafları ana hatta ekleme; başlangıçta 5 saniye, ayarlanabilir süre.
+- [x] Seçili video/fotoğrafı önizlemede taşıma ve köşe tutamaklarıyla oranlı ölçekleme.
+- [x] %5–800 ölçek, −180°…180° döndürme, sahne dışına taşmaya izin veren konum ve dört kaynak kenarından kırpma.
+- [x] Kaynak yön bilgisini hesaba katan ortak önizleme/export geometrisi.
+- [x] Sürükleme taslağını `Esc` ile iptal; tamamlanan hareketi tek undo ile geri alma.
+- [x] Fotoğraf ve dönüşüm verileri için şema 3; şema 1 ve 2 projelerini açma.
+
+Bu özelliklerin fiziksel Mac üzerinde fare, klavye, dar pencere ve farklı kaynak yönleriyle kabul testi yapılmalıdır. Dönüşüm bütün klip boyunca sabittir; çoklu video katmanı henüz uygulanmadı.
+
+Kalan işler: keyframe/easing, çoklu katman dönüşümleri, hız, freeze frame, geçişler, renk ayarı, EQ/compressor/limiter, ducking. Daha sonra LUT, maske/chroma key ve gelişmiş denoise.
 
 ## Aşama 5: sağlamlaştırma
 
@@ -72,12 +83,13 @@ Keyframe/easing, crop tutamakları, hız, freeze frame, geçişler, renk ayarı,
 - Yapay zekâ/analiz UI'dan bağımsızdır; ilerleme/iptal zorunludur.
 - Intel ve Apple Silicon ayrı paketlerdir; minimum macOS 14 Sonoma. İki mimaride bağımsız CI doğrulaması yapılır.
 - Her aşama başarılı CI ve fiziksel Mac kabul testiyle kapanır.
-- Şema 2'de boşluklu klip konumları ve taşıma/ripple sırasında altyazı eşlemesi vardır. Altyazılar hâlâ timeline'a bağlıdır; kalıcı kaynak bağları ve çoklu katman için model genişletilir.
+- Şema 3, şema 2'nin boşluklu klip konumlarını ve taşıma/ripple sırasında altyazı eşlemesini korur; fotoğraf türü, dönüşüm ve kaynak kırpma bilgisi ekler. Şema 1 ve 2 projeleri açılır, yeni kayıtlar şema 3'tür. Altyazılar hâlâ timeline'a bağlıdır; kalıcı kaynak bağları ve çoklu katman için model genişletilir.
 
 ## İlk Mac kabul testi
 
 - [ ] İndirilen ad-hoc uygulama Applications klasöründen açılıyor.
 - [ ] İki video ve bir ses birlikte sürükle bırak ile yükleniyor.
+- [ ] JPEG/PNG/HEIC/TIFF fotoğraf yükleniyor; süre değişimi, kaydet/aç ve MP4 export çalışıyor.
 - [ ] Video/ses dalgasında sessiz, düşük ve güçlü bölümler ayırt ediliyor; müzik dalgası da görünüyor.
 - [ ] Boşluğa taşıma, yakın kenara mıknatıslanma, `⌥` ile geçici kapatma ve tek undo çalışıyor.
 - [ ] Uzun projede kaydırma, sığdırma ve sürüklerken otomatik kaydırma akıcı.
@@ -87,7 +99,8 @@ Keyframe/easing, crop tutamakları, hız, freeze frame, geçişler, renk ayarı,
 - [ ] Seçilen sessizlik kesimleri tek undo ile geri geliyor; altyazı eşlemesi ve sürekli müzik export ile tutarlı.
 - [ ] Play/pause, kare ilerleme ve zaman cetvelinde seek çalışıyor.
 - [ ] Böl/sil/undo/redo sonrası süre ve görüntü beklenen şekilde.
-- [ ] Dikey sahne, crop, zoom ve altyazı preview/export tutarlı.
+- [ ] Önizlemede video/fotoğraf taşıma, köşeden boyutlandırma, `Esc` ile iptal ve tek undo çalışıyor.
+- [ ] Dikey sahne, kaynak kırpma, döndürme, zoom ve altyazı preview/export tutarlı; telefon medyasının yönü korunuyor.
 - [ ] Kaydet, kapat, aç ve medyayı yeniden bağla akışı çalışıyor.
 - [ ] Export iptali eski hedef dosyayı koruyor.
 - [ ] Türkçe karakter ve uzun dosya adları düzgün görünüyor.

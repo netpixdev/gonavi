@@ -91,9 +91,14 @@ enum CaptionEngine {
         defer { try? FileManager.default.removeItem(at: folder) }
         var result: [Caption] = [], timeline = EditTime.zero
         for (index, clip) in project.clips.enumerated() {
+            try Task.checkCancellation()
             timeline = project.start(of: clip.id)
             guard let source = project.sources.first(where: { $0.id == clip.sourceID }) else {
                 throw ProjectError.invalid("Konuşma için kaynak video bulunamadı.")
+            }
+            if source.isStillImage {
+                report("Fotoğraf atlandı · \(source.name)", (timeline + clip.duration).seconds / max(1, project.duration.seconds))
+                continue
             }
             let asset = AVURLAsset(url: try MediaEngine.resolve(source))
             var position = EditTime.zero

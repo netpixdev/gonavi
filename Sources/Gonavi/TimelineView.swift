@@ -141,7 +141,7 @@ private struct TimelineSurface: NSViewRepresentable {
             let end = start + clip.duration.seconds
             guard x(end) >= gutter, x(start) <= bounds.width else { continue }
             let rect = NSRect(x: x(start), y: 33, width: max(2, clip.duration.seconds * store.timeline.pixelsPerSecond), height: 82)
-            let color = source?.isVideo == true ? Theme.videoColor : Theme.audioColor
+            let color = source?.isVisual == true ? Theme.videoColor : Theme.audioColor
             color.withAlphaComponent(0.26).setFill(); NSBezierPath(roundedRect: rect, xRadius: 6, yRadius: 6).fill()
             color.withAlphaComponent(0.8).setStroke(); let outline = NSBezierPath(roundedRect: rect.insetBy(dx: 0.5, dy: 0.5), xRadius: 6, yRadius: 6)
             outline.lineWidth = 1; outline.stroke()
@@ -149,7 +149,7 @@ private struct TimelineSurface: NSViewRepresentable {
                 Theme.accentColor.setStroke(); outline.lineWidth = 2; outline.stroke()
             }
             let visible = rect.intersection(NSRect(x: gutter, y: 0, width: lane.width, height: bounds.height))
-            text((source?.isVideo == true ? "▸  " : "♫  ") + (source?.name ?? "Klip"),
+            text((source?.isVisual == true ? "▸  " : "♫  ") + (source?.name ?? "Klip"),
                  at: NSPoint(x: max(rect.minX + 9, gutter + 6), y: 40), color: .white, size: 11,
                  width: max(0, visible.width - 15), weight: .medium)
             drawWaveform(waveforms[clip.sourceID], rect: NSRect(x: rect.minX, y: 62, width: rect.width, height: 44),
@@ -324,9 +324,9 @@ private struct TimelineSurface: NSViewRepresentable {
         guard currentPoint.x >= gutter else { return [] }
         externalSource = sourceID(sender)
         if let id = externalSource, let source = store.project.sources.first(where: { $0.id == id }) {
-            let result = store.snappedTime(time(currentPoint.x), duration: source.duration.seconds,
+            let result = store.snappedTime(time(currentPoint.x), duration: source.defaultClipDuration.seconds,
                                            bypass: NSEvent.modifierFlags.contains(.option))
-            ghost = (result.time, source.duration.seconds); guide = result.guide
+            ghost = (result.time, source.defaultClipDuration.seconds); guide = result.guide
         } else if sender.draggingPasteboard.canReadObject(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) {
             // Duration is known after inspection; show an insertion guide until then.
             guide = TimelineGeometry.snap(proposedStart: time(currentPoint.x), duration: 0,
@@ -340,7 +340,7 @@ private struct TimelineSurface: NSViewRepresentable {
         guard let store, store.editable else { clearDrag(); return false }
         defer { clearDrag() }
         if let id = sourceID(sender), let source = store.project.sources.first(where: { $0.id == id }) {
-            let result = store.snappedTime(time(currentPoint.x), duration: source.duration.seconds,
+            let result = store.snappedTime(time(currentPoint.x), duration: source.defaultClipDuration.seconds,
                                            bypass: NSEvent.modifierFlags.contains(.option))
             store.addSource(source, at: result.time); return true
         }
@@ -366,8 +366,8 @@ private struct TimelineSurface: NSViewRepresentable {
         store.timeline.pan(delta)
         if heldClip != nil { updateMove() }
         else if let id = externalSource, let source = store.project.sources.first(where: { $0.id == id }) {
-            let result = store.snappedTime(time(currentPoint.x), duration: source.duration.seconds)
-            ghost = (result.time, source.duration.seconds); guide = result.guide
+            let result = store.snappedTime(time(currentPoint.x), duration: source.defaultClipDuration.seconds)
+            ghost = (result.time, source.defaultClipDuration.seconds); guide = result.guide
         } else { guide = time(currentPoint.x) }
         needsDisplay = true
     }

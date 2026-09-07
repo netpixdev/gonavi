@@ -109,6 +109,7 @@ enum WaveformDecoder {
 
     static func decode(_ source: MediaSource, useCache: Bool = true) async throws -> WaveformEntry {
         try Task.checkCancellation()
+        if source.isStillImage { return .noAudio }
         let url = try MediaEngine.resolve(source).standardizedFileURL.resolvingSymlinksInPath()
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }

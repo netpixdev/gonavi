@@ -38,7 +38,10 @@ struct EditorView: View {
             }.font(.caption).foregroundStyle(Theme.secondary).padding(.horizontal, 16).frame(height: 28)
         }
         .background(Theme.canvas).tint(Theme.accent)
-        .onChange(of: store.selectedClip) { _, selected in if selected != nil { inspectorTab = 1 } }
+        .onAppear { if store.selectedClip != nil { inspectorTab = 1 } }
+        .onChange(of: store.selectedClip) { _, selected in
+            if selected != nil { inspectorTab = 1; store.focusSelectedVisualClip() }
+        }
         .onChange(of: store.selectedCaption) { _, selected in if selected != nil { inspectorTab = 2 } }
         .sheet(isPresented: $store.showingAutoCaptions) { AutoCaptionView(store: store) }
         .sheet(isPresented: $store.showingSilences) { SilenceView(store: store) }
@@ -83,17 +86,17 @@ struct EditorView: View {
                 VStack(alignment: .leading, spacing: 16) {
                     Image(systemName: "film.stack").font(.system(size: 30, weight: .light)).foregroundStyle(Theme.accent)
                     Text("Bir görüntü.\nBir ses. Bir hikâye.").font(.title2.weight(.semibold))
-                    Text("Video ve ses dosyalarını buraya bırakın veya bilgisayarınızdan seçin.")
+                    Text("Video, fotoğraf ve ses dosyalarını buraya bırakın veya bilgisayarınızdan seçin.")
                         .font(.callout).foregroundStyle(Theme.secondary)
                     Button("Dosya Seç…", action: store.chooseMedia).disabled(!store.editable)
                 }.padding(20)
             } else {
                 List(store.project.sources) { source in
                     HStack(alignment: .top, spacing: 10) {
-                        Image(systemName: source.isVideo ? "film" : "waveform").foregroundStyle(Theme.accent).frame(width: 22)
+                        Image(systemName: source.isStillImage ? "photo" : source.isVideo ? "film" : "waveform").foregroundStyle(Theme.accent).frame(width: 22)
                         VStack(alignment: .leading, spacing: 5) {
                             Text(source.name).font(.system(size: 12, weight: .medium)).foregroundStyle(Theme.ink).lineLimit(1).truncationMode(.middle)
-                            Text(clock(source.duration.seconds)).font(.caption.monospaced()).foregroundStyle(Theme.secondary)
+                            Text(source.isStillImage ? "Fotoğraf · 5 sn" : clock(source.duration.seconds)).font(.caption.monospaced()).foregroundStyle(Theme.secondary)
                         }
                         Spacer(minLength: 0)
                         Button { store.addSource(source) } label: { Image(systemName: "plus") }
@@ -107,8 +110,8 @@ struct EditorView: View {
                         return item
                     }
                     .contextMenu {
-                        Button("Müzik Olarak Ekle") { store.addMusic(source) }.disabled(!store.editable)
-                        Button("Dalga Formunu Yeniden Oku") { store.waveforms.invalidate(source.id) }
+                        Button("Müzik Olarak Ekle") { store.addMusic(source) }.disabled(!store.editable || source.isStillImage)
+                        Button("Dalga Formunu Yeniden Oku") { store.waveforms.invalidate(source.id) }.disabled(source.isStillImage)
                         Button("Dosyayı Yeniden Bağla…") { store.relink(source) }.disabled(!store.editable)
                     }
                 }.listStyle(.sidebar)
@@ -152,19 +155,12 @@ struct EditorView: View {
                     VStack(spacing: 12) {
                         Image(systemName: "play.rectangle").font(.system(size: 46, weight: .ultraLight))
                         Text("Hikâyeniz burada şekillenecek.").font(.callout)
-                        Text("Video veya ses ekleyin · ⌘I").font(.caption).foregroundStyle(Theme.secondary)
+                        Text("Video, fotoğraf veya ses ekleyin · ⌘I").font(.caption).foregroundStyle(Theme.secondary)
                     }.foregroundStyle(Theme.secondary)
                 } else if !store.hasVideo {
                     AudioPreview(store: store)
                 } else {
-                    ZStack {
-                        PlayerSurface(player: store.player)
-                        if !store.isPlaying, let frame = store.previewFrame {
-                            Image(nsImage: frame).resizable().scaledToFit().allowsHitTesting(false)
-                        }
-                    }
-                        .aspectRatio(CGFloat(store.project.scene.width) / CGFloat(store.project.scene.height), contentMode: .fit)
-                        .padding(16)
+                    TransformPreview(store: store)
                 }
                 if store.isBuilding { ProgressView("Önizleme hazırlanıyor…").padding(20).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8)) }
             }.frame(maxWidth: .infinity, maxHeight: .infinity).background(Theme.inset)
@@ -222,14 +218,32 @@ struct EditorView: View {
         if let clip = store.activeClip {
             Text("Görüntü ve ses").font(.headline)
             Text(store.project.sources.first { $0.id == clip.sourceID }?.name ?? "Klip").font(.caption).foregroundStyle(Theme.secondary)
-            if store.project.sources.first(where: { $0.id == clip.sourceID })?.isVideo == true {
-                Toggle("Sahneyi doldur (crop)", isOn: Binding(get: { store.activeClip?.fill ?? false }, set: { value in store.updateClip { $0.fill = value } }))
-                valueSlider("Zoom", value: clipBinding(\.zoom), range: 1...4)
-                valueSlider("Yatay konum", value: clipBinding(\.offsetX), range: -1...1)
-                valueSlider("Dikey konum", value: clipBinding(\.offsetY), range: -1...1)
-                Button("Görüntüyü Sıfırla") { store.updateClip { $0.zoom = 1; $0.offsetX = 0; $0.offsetY = 0; $0.fill = false } }
+            if store.project.sources.first(where: { $0.id == clip.sourceID })?.isVisual == true {
+                Text("Önizlemede sürükleyin; köşelerden boyutlandırın. Ok tuşları: 1 piksel · ⇧: 10 piksel.")
+                    .font(.caption).foregroundStyle(Theme.secondary)
+                Toggle("Sahneyi doldur", isOn: Binding(get: { store.activeClip?.fill ?? false }, set: { value in store.updateClip { $0.fill = value } }))
+                valueSlider("Ölçek", value: clipBinding(\.zoom), range: 0.05...8)
+                valueSlider("Yatay konum", value: clipBinding(\.offsetX), range: -4...4)
+                valueSlider("Dikey konum", value: clipBinding(\.offsetY), range: -4...4)
+                valueSlider("Döndürme (°)", value: clipBinding(\.rotation), range: -180...180)
+                DisclosureGroup("Kaynak kırpma") {
+                    VStack(spacing: 12) {
+                        cropSlider("Sol", path: \.left, opposite: \.right)
+                        cropSlider("Sağ", path: \.right, opposite: \.left)
+                        cropSlider("Üst", path: \.top, opposite: \.bottom)
+                        cropSlider("Alt", path: \.bottom, opposite: \.top)
+                    }.padding(.top, 12)
+                }.font(.caption)
+                Button("Görüntüyü Sıfırla", action: store.resetVisualTransform)
             }
-            valueSlider("Ses seviyesi", value: clipBinding(\.volume), range: 0...2)
+            if store.project.sources.first(where: { $0.id == clip.sourceID })?.isStillImage == true {
+                LabeledContent("Fotoğraf süresi (sn)") {
+                    TextField("Fotoğraf süresi", value: Binding(get: { clip.duration.seconds }, set: store.setPhotoDuration), format: .number).frame(width: 70)
+                }
+                Text("Süre değiştiğinde sonraki klipler kaydırılır.").font(.caption).foregroundStyle(Theme.secondary)
+            } else {
+                valueSlider("Ses seviyesi", value: clipBinding(\.volume), range: 0...2)
+            }
             LabeledContent("Konum (sn)") {
                 TextField("Timeline konumu", value: Binding(get: { store.project.start(of: clip.id).seconds }, set: { store.moveClip(clip.id, to: $0) }), format: .number).frame(width: 80)
             }
@@ -244,7 +258,7 @@ struct EditorView: View {
         Group {
             HStack { Text("Altyazılar").font(.headline); Spacer(); Button(action: store.addCaption) { Image(systemName: "plus") }.disabled(store.project.clips.isEmpty) }
             Button(action: store.automaticCaptions) { Label("Otomatik Altyazı…", systemImage: "captions.bubble") }
-                .buttonStyle(.borderedProminent).disabled(store.project.clips.isEmpty || !store.editable)
+                .buttonStyle(.borderedProminent).disabled(!store.hasTimedMedia || !store.editable)
             Text("Türkçe · ücretsiz · cihazda çalışır").font(.caption).foregroundStyle(Theme.secondary)
             ForEach(store.project.captions) { caption in
                 Button { store.selectedCaption = caption.id; store.seek(caption.start.seconds) } label: {
@@ -278,9 +292,21 @@ struct EditorView: View {
     private func clipBinding(_ path: WritableKeyPath<VideoClip, Double>) -> Binding<Double> {
         Binding(get: { store.activeClip?[keyPath: path] ?? 0 }, set: { value in store.updateClip { $0[keyPath: path] = value } })
     }
+    private func cropSlider(_ label: String, path: WritableKeyPath<ClipCrop, Double>, opposite: KeyPath<ClipCrop, Double>) -> some View {
+        valueSlider(label + " (%)", value: Binding(get: { (store.activeClip?.crop[keyPath: path] ?? 0) * 100 }, set: { value in
+            store.updateClip { $0.crop[keyPath: path] = min(0.95 - $0.crop[keyPath: opposite], max(0, value / 100)) }
+        }), range: 0...max(0.001, (0.95 - (store.activeClip?.crop[keyPath: opposite] ?? 0)) * 100))
+    }
     private func valueSlider(_ label: String, value: Binding<Double>, range: ClosedRange<Double>) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack { Text(label); Spacer(); Text(value.wrappedValue, format: .number.precision(.fractionLength(2))).monospacedDigit().foregroundStyle(Theme.secondary) }.font(.caption)
+            HStack {
+                Text(label); Spacer()
+                TextField(label, value: Binding(get: { value.wrappedValue }, set: { input in
+                    if input.isFinite { value.wrappedValue = min(range.upperBound, max(range.lowerBound, input)) }
+                }), format: .number.precision(.fractionLength(2)))
+                    .multilineTextAlignment(.trailing).textFieldStyle(.plain).frame(width: 58)
+                    .monospacedDigit().foregroundStyle(Theme.secondary)
+            }.font(.caption)
             Slider(value: value, in: range, onEditingChanged: store.sliderEditing).accessibilityLabel(label)
         }
     }

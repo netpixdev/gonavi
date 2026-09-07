@@ -39,9 +39,9 @@ struct GonaviApp: App {
             }
             CommandMenu("Kurgu") {
                 Button("Sessizlikleri Temizle…", action: store.automaticSilences)
-                    .disabled(store.project.clips.isEmpty || !store.editable)
+                    .disabled(!store.hasTimedMedia || !store.editable)
                 Button("Otomatik Altyazı…", action: store.automaticCaptions)
-                    .disabled(store.project.clips.isEmpty || !store.editable)
+                    .disabled(!store.hasTimedMedia || !store.editable)
             }
         }
     }

@@ -49,8 +49,9 @@ final class EditorStore: ObservableObject {
     var canRedo: Bool { !redoStack.isEmpty }
     var activeClip: VideoClip? { project.clips.first { $0.id == selectedClip } }
     var editable: Bool { !importing && !exporting && !showingAutoCaptions && !showingSilences }
-    var hasVideo: Bool { project.clips.contains { clip in project.sources.contains { $0.id == clip.sourceID && $0.isVideo } } }
+    var hasVideo: Bool { project.clips.contains { clip in project.sources.contains { $0.id == clip.sourceID && $0.isVisual } } }
     var canExport: Bool { project.duration > .zero && prepared != nil && !isBuilding && editable }
+    var hasTimedMedia: Bool { project.clips.contains { clip in project.sources.contains { $0.id == clip.sourceID && !$0.isStillImage } } }
 
     init(storageDirectory: URL? = nil) {
         let directory = storageDirectory ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -97,6 +98,55 @@ final class EditorStore: ObservableObject {
     func updateClip(_ action: (inout VideoClip) -> Void) {
         guard let id = selectedClip else { return }
         mutate { p in if let index = p.clips.firstIndex(where: { $0.id == id }) { action(&p.clips[index]) } }
+    }
+    func commitVisualTransform(_ value: VideoClip, expectedRevision: Int) {
+        guard editable, !isPlaying, revision == expectedRevision, selectedClip == value.id,
+              project.sources.first(where: { $0.id == value.sourceID })?.isVisual == true else { return }
+        continuousEdit = false; continuousRecorded = false
+        updateClip {
+            $0.zoom = value.zoom; $0.offsetX = value.offsetX; $0.offsetY = value.offsetY
+            $0.rotation = value.rotation; $0.crop = value.crop; $0.fill = value.fill
+        }
+    }
+    func resetVisualTransform() {
+        updateClip {
+            $0.zoom = 1; $0.offsetX = 0; $0.offsetY = 0
+            $0.rotation = 0; $0.crop = ClipCrop(); $0.fill = false
+        }
+    }
+    func focusSelectedVisualClip() {
+        guard editable, let clip = activeClip,
+              project.sources.first(where: { $0.id == clip.sourceID })?.isVisual == true else { return }
+        player.pause(); isPlaying = false
+        let start = project.start(of: clip.id).seconds
+        seek(playhead >= start && playhead < start + clip.duration.seconds ? playhead : start)
+    }
+    func setPhotoDuration(_ seconds: Double) {
+        guard let clip = activeClip, seconds.isFinite,
+              project.sources.first(where: { $0.id == clip.sourceID })?.isStillImage == true else { return }
+        let ticksPerFrame = EditTime.scale / Int64(project.fps)
+        let duration = EditTime(ticks: max(ticksPerFrame, EditTime(seconds: seconds).ticks / ticksPerFrame * ticksPerFrame))
+        guard seconds > 0, seconds <= 86400 else { error = "Fotoğraf süresi 0–86400 saniye arasında olmalı."; return }
+        mutate { p in
+            p.normalizeTimeline()
+            guard let index = p.clips.firstIndex(where: { $0.id == clip.id }) else { return }
+            let oldEnd = p.start(of: clip.id) + clip.duration
+            let delta = duration - clip.duration
+            p.clips[index].duration = duration
+            for other in p.clips.indices where other > index {
+                p.clips[other].timelineStart = p.start(of: p.clips[other].id) + delta
+            }
+            // Captions beyond the photo follow later clips; captions on the photo are clamped when shortened.
+            p.captions = p.captions.compactMap { caption in
+                var next = caption
+                func map(_ time: EditTime) -> EditTime {
+                    time >= oldEnd ? time + delta : (delta < .zero ? min(time, oldEnd + delta) : time)
+                }
+                next.start = map(caption.start)
+                next.duration = map(caption.start + caption.duration) - next.start
+                return next.duration > .zero ? next : nil
+            }
+        }
     }
     func updateCaption(_ action: (inout Caption) -> Void) {
         guard let id = selectedCaption else { return }
@@ -240,7 +290,7 @@ final class EditorStore: ObservableObject {
         guard editable else { return }
         if !hasOpenProject { newProject(); return }
         let panel = NSOpenPanel(); panel.allowsMultipleSelection = true
-        panel.allowedContentTypes = [.movie, .audio]; panel.canChooseDirectories = false
+        panel.allowedContentTypes = [.movie, .audio, .image]; panel.canChooseDirectories = false
         guard panel.runModal() == .OK else { return }
         importURLs(panel.urls)
     }
@@ -259,9 +309,9 @@ final class EditorStore: ObservableObject {
                 var position = dropTime
                 for source in imported {
                     let registered = p.sources.first(where: { $0.path == source.path }) ?? source
-                    let target = position.map { self.snappedTime($0, duration: registered.duration.seconds, in: p, bypass: !snap).time }
+                    let target = position.map { self.snappedTime($0, duration: registered.defaultClipDuration.seconds, in: p, bypass: !snap).time }
                     let id = p.appendSourceToTimeline(source: registered, at: target.map(EditTime.init(seconds:)))
-                    if position != nil { position = p.start(of: id).seconds + registered.duration.seconds }
+                    if position != nil { position = p.start(of: id).seconds + registered.defaultClipDuration.seconds }
                 }
             }
             if selectedClip == nil { selectedClip = project.clips.first?.id }
@@ -275,17 +325,18 @@ final class EditorStore: ObservableObject {
         selectedClip = id
     }
     func addMusic(_ source: MediaSource) {
+        guard !source.isStillImage else { return }
         mutate { $0.music = MusicClip(sourceID: source.id) }
     }
     func relink(_ source: MediaSource) {
         guard editable else { return }
-        let panel = NSOpenPanel(); panel.allowedContentTypes = source.isVideo ? [.movie] : [.audio, .movie]
+        let panel = NSOpenPanel(); panel.allowedContentTypes = source.isStillImage ? [.image] : source.isVideo ? [.movie] : [.audio, .movie]
         guard panel.runModal() == .OK, let url = panel.url else { return }
         importing = true
         Task {
             do {
                 var replacement = try await MediaEngine.inspect(url)
-                guard replacement.isVideo == source.isVideo else { throw ProjectError.invalid("Medya türü eşleşmiyor.") }
+                guard replacement.isVideo == source.isVideo, replacement.isStillImage == source.isStillImage else { throw ProjectError.invalid("Medya türü eşleşmiyor.") }
                 replacement.id = source.id; importing = false
                 mutate { p in if let index = p.sources.firstIndex(where: { $0.id == source.id }) { p.sources[index] = replacement } }
                 waveforms.invalidate(source.id)
@@ -367,11 +418,11 @@ final class EditorStore: ObservableObject {
         mutate { $0.captions.append(caption) }; selectedCaption = caption.id
     }
     func automaticCaptions() {
-        guard editable, !project.clips.isEmpty else { return }
+        guard editable, hasTimedMedia else { return }
         player.pause(); isPlaying = false; showingHome = false; showingAutoCaptions = true
     }
     func automaticSilences() {
-        guard editable, !project.clips.isEmpty else { return }
+        guard editable, hasTimedMedia else { return }
         player.pause(); isPlaying = false; continuousEdit = false; continuousRecorded = false
         showingHome = false; showingSilences = true
     }

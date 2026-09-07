@@ -60,6 +60,7 @@ enum SmokeTest {
         try project.srt().write(to: directory.appendingPathComponent("captions.srt"), atomically: true, encoding: .utf8)
         try await snapshotUI(directory: directory)
         try await TimelineSmokeTest.run(directory: directory.appendingPathComponent("timeline"))
+        try await TransformSmokeTest.run(directory: directory.appendingPathComponent("transform"))
         let report = "PASS: project round-trip, 4s export, 1920×1080, two ordered clips, audio RMS \(rms), caption visibility and timing. Welcome/create/recent/recovery navigation passed. Native UI snapshots generated for visual inspection.\n"
         try report.write(to: directory.appendingPathComponent("report.txt"), atomically: true, encoding: .utf8)
     }

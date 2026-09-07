@@ -25,10 +25,11 @@ final class FrameInstruction: NSObject, AVVideoCompositionInstructionProtocol {
     let transform: CGAffineTransform
     let clip: VideoClip
     let captions: [RenderCaption]
+    let stillImage: CIImage?
     init(range: CMTimeRange, trackID: CMPersistentTrackID, transform: CGAffineTransform,
-         clip: VideoClip, captions: [RenderCaption]) {
+         clip: VideoClip, captions: [RenderCaption], stillImage: CIImage? = nil) {
         timeRange = range; self.trackID = trackID; self.transform = transform
-        self.clip = clip; self.captions = captions
+        self.clip = clip; self.captions = captions; self.stillImage = stillImage
         requiredSourceTrackIDs = [NSNumber(value: trackID)]
     }
 }
@@ -53,30 +54,33 @@ final class GonaviCompositor: NSObject, AVVideoCompositing {
         }
     }
     private func render(_ request: AVAsynchronousVideoCompositionRequest) {
-                guard let instruction = request.videoCompositionInstruction as? FrameInstruction,
-                      let source = request.sourceFrame(byTrackID: instruction.trackID),
-                      let output = request.renderContext.newPixelBuffer() else {
-                    request.finish(with: ProjectError.invalid("Video karesi oluşturulamadı.")); return
-                }
-                let bounds = CGRect(origin: .zero, size: request.renderContext.size)
-                var image = CIImage(cvPixelBuffer: source).transformed(by: instruction.transform)
-                let extent = image.extent
-                image = image.transformed(by: .init(translationX: -extent.minX, y: -extent.minY))
-                let xScale = bounds.width / extent.width, yScale = bounds.height / extent.height
-                let baseScale: CGFloat = instruction.clip.fill ? max(xScale, yScale) : min(xScale, yScale)
-                let scale: CGFloat = baseScale * CGFloat(instruction.clip.zoom)
-                image = image.transformed(by: .init(scaleX: scale, y: scale))
-                let offsetX: CGFloat = (bounds.width - extent.width * scale) / 2 + CGFloat(instruction.clip.offsetX) * bounds.width / 2
-                let offsetY: CGFloat = (bounds.height - extent.height * scale) / 2 + CGFloat(instruction.clip.offsetY) * bounds.height / 2
-                image = image.transformed(by: CGAffineTransform(translationX: offsetX, y: offsetY))
-                var frame = image.composited(over: CIImage(color: .black).cropped(to: bounds)).cropped(to: bounds)
-                let time = request.compositionTime.seconds
-                for caption in instruction.captions where time >= caption.start && time < caption.end {
-                    frame = caption.image.composited(over: frame)
-                }
-                self.context.render(frame, to: output, bounds: bounds,
-                                    colorSpace: CGColorSpace(name: CGColorSpace.sRGB)!)
-                request.finish(withComposedVideoFrame: output)
+        guard let instruction = request.videoCompositionInstruction as? FrameInstruction,
+              let output = request.renderContext.newPixelBuffer() else {
+            request.finish(with: ProjectError.invalid("Video karesi oluşturulamadı.")); return
+        }
+        let bounds = CGRect(origin: .zero, size: request.renderContext.size)
+        var image: CIImage
+        if let still = instruction.stillImage {
+            image = still
+        } else if let source = request.sourceFrame(byTrackID: instruction.trackID) {
+            image = CIImage(cvPixelBuffer: source).transformed(by: instruction.transform)
+        } else {
+            request.finish(with: ProjectError.invalid("Kaynak video karesi okunamadı.")); return
+        }
+        let extent = image.extent
+        guard extent.width.isFinite, extent.height.isFinite, extent.width > 0, extent.height > 0 else {
+            request.finish(with: ProjectError.invalid("Kaynak görüntü boyutu geçersiz.")); return
+        }
+        image = image.transformed(by: .init(translationX: -extent.minX, y: -extent.minY))
+        let layout = VisualGeometry.layout(sourceSize: extent.size, sceneSize: bounds.size, clip: instruction.clip)
+        image = image.cropped(to: layout.cropRect).transformed(by: layout.transform)
+        var frame = image.composited(over: CIImage(color: .black).cropped(to: bounds)).cropped(to: bounds)
+        let time = request.compositionTime.seconds
+        for caption in instruction.captions where time >= caption.start && time < caption.end {
+            frame = caption.image.composited(over: frame)
+        }
+        context.render(frame, to: output, bounds: bounds, colorSpace: CGColorSpace(name: CGColorSpace.sRGB)!)
+        request.finish(withComposedVideoFrame: output)
     }
 }
 
@@ -107,6 +111,16 @@ enum MediaEngine {
     }
 
     static func inspect(_ url: URL) async throws -> MediaSource {
+        try Task.checkCancellation()
+        if PhotoSource.isImageURL(url) {
+            try PhotoSource.validate(url)
+            try Task.checkCancellation()
+            var source = MediaSource(name: url.lastPathComponent, path: url.path,
+                bookmark: try? url.bookmarkData(options: [], includingResourceValuesForKeys: nil, relativeTo: nil),
+                duration: EditTime(seconds: 86_400), isVideo: false)
+            source.isStillImage = true
+            return source
+        }
         let asset = AVURLAsset(url: url)
         let duration = try await asset.load(.duration)
         let video = try await asset.loadTracks(withMediaType: .video)
@@ -118,10 +132,37 @@ enum MediaEngine {
                            duration: EditTime(seconds: duration.seconds), isVideo: !video.isEmpty)
     }
 
+    /// A raw, source-oriented frame for the live canvas. The canvas applies the
+    /// same VisualGeometry used by the compositor; captions remain independent.
+    static func previewSourceImage(_ source: MediaSource, at seconds: Double) async throws -> CGImage {
+        try Task.checkCancellation()
+        let url = try resolve(source)
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        if source.isStillImage {
+            let image = try PhotoSource.thumbnail(url, maximum: 1920)
+            try Task.checkCancellation()
+            return image
+        }
+        guard source.isVideo else { throw ProjectError.invalid("Ses dosyasının görüntü karesi yok.") }
+        let generator = AVAssetImageGenerator(asset: AVURLAsset(url: url))
+        generator.appliesPreferredTrackTransform = true
+        generator.maximumSize = CGSize(width: 1920, height: 1920)
+        generator.requestedTimeToleranceBefore = .zero
+        generator.requestedTimeToleranceAfter = .zero
+        // Never request the exclusive end of a video track.
+        let position = max(0, min(seconds.isFinite ? seconds : 0, max(0, source.duration.seconds - 1.0 / 60_000)))
+        return try await withTaskCancellationHandler(operation: {
+            let result = try await generator.image(at: CMTime(seconds: position, preferredTimescale: 60_000))
+            try Task.checkCancellation()
+            return result.image
+        }, onCancel: { generator.cancelAllCGImageGeneration() })
+    }
+
     static func prepare(_ project: Project) async throws -> PreparedTimeline {
         try project.validate()
         let composition = AVMutableComposition()
-        let hasVideo = project.clips.contains { clip in project.sources.contains { $0.id == clip.sourceID && $0.isVideo } }
+        let hasVideo = project.clips.contains { clip in project.sources.contains { $0.id == clip.sourceID && $0.isVisual } }
         let videoTrack = hasVideo ? composition.addMutableTrack(withMediaType: .video, preferredTrackID: kCMPersistentTrackID_Invalid) : nil
         guard let soundTrack = composition.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid) else {
             throw ProjectError.invalid("Kurgu hatları oluşturulamadı.")
@@ -132,47 +173,58 @@ enum MediaEngine {
         let soundParameters = AVMutableAudioMixInputParameters(track: soundTrack)
         var mixParameters = [soundParameters]
         var cursor = CMTime.zero
-        func background(start: CMTime, duration: CMTime) async throws {
+        var stillImages: [UUID: CIImage] = [:]
+        func background(start: CMTime, duration: CMTime, clip: VideoClip? = nil, stillImage: CIImage? = nil) async throws {
             guard let videoTrack, duration > .zero else { return }
             let asset = AVURLAsset(url: try await BlackFrameSource.shared.url())
             guard let track = try await asset.loadTracks(withMediaType: .video).first else { throw ProjectError.invalid("Sahne oluşturulamadı.") }
             let frame = CMTime(value: 1, timescale: 30)
             try videoTrack.insertTimeRange(CMTimeRange(start: .zero, duration: frame), of: track, at: start)
             videoTrack.scaleTimeRange(CMTimeRange(start: start, duration: frame), toDuration: duration)
-            let placeholder = VideoClip(sourceID: UUID(), duration: EditTime(seconds: duration.seconds))
+            let placeholder = clip ?? VideoClip(sourceID: UUID(), duration: EditTime(seconds: duration.seconds))
             instructions.append(FrameInstruction(range: CMTimeRange(start: start, duration: duration), trackID: videoTrack.trackID,
                                                  transform: .identity, clip: placeholder, captions: renderedCaptions.filter {
                 $0.end > start.seconds && $0.start < (start + duration).seconds
-            }))
+            }, stillImage: stillImage))
         }
         for clip in project.clips {
             try Task.checkCancellation()
             guard let media = project.sources.first(where: { $0.id == clip.sourceID }) else {
                 throw ProjectError.invalid("Klip kaynağı bulunamadı.")
             }
-            let asset = AVURLAsset(url: try resolve(media))
             let start = project.start(of: clip.id).cm
             if start > cursor { try await background(start: cursor, duration: start - cursor) }
             cursor = start
             let range = CMTimeRange(start: clip.sourceStart.cm, duration: clip.duration.cm)
-            if media.isVideo, let videoTrack {
-                guard let sourceVideo = try await asset.loadTracks(withMediaType: .video).first else {
-                    throw ProjectError.invalid("Video hattı bulunamadı: \(media.name)")
+            if media.isStillImage {
+                let still: CIImage
+                if let cached = stillImages[media.id] { still = cached }
+                else {
+                    still = try PhotoSource.image(resolve(media))
+                    stillImages[media.id] = still
                 }
-                try videoTrack.insertTimeRange(range, of: sourceVideo, at: cursor)
-                let transform = try await sourceVideo.load(.preferredTransform)
-                instructions.append(FrameInstruction(range: CMTimeRange(start: cursor, duration: clip.duration.cm),
-                                                     trackID: videoTrack.trackID, transform: transform, clip: clip,
-                                                     captions: renderedCaptions.filter {
-                    $0.end > cursor.seconds && $0.start < (cursor + clip.duration.cm).seconds
-                }))
-            } else { try await background(start: cursor, duration: clip.duration.cm) }
-            if let sourceAudio = try await asset.loadTracks(withMediaType: .audio).first {
-                let available = try await sourceAudio.load(.timeRange)
-                let intersection = CMTimeRangeGetIntersection(range, otherRange: available)
-                if intersection.duration > .zero {
-                    let position = cursor + (intersection.start - range.start)
-                    try soundTrack.insertTimeRange(intersection, of: sourceAudio, at: position)
+                try await background(start: cursor, duration: clip.duration.cm, clip: clip, stillImage: still)
+            } else {
+                let asset = AVURLAsset(url: try resolve(media))
+                if media.isVideo, let videoTrack {
+                    guard let sourceVideo = try await asset.loadTracks(withMediaType: .video).first else {
+                        throw ProjectError.invalid("Video hattı bulunamadı: \(media.name)")
+                    }
+                    try videoTrack.insertTimeRange(range, of: sourceVideo, at: cursor)
+                    let transform = try await sourceVideo.load(.preferredTransform)
+                    instructions.append(FrameInstruction(range: CMTimeRange(start: cursor, duration: clip.duration.cm),
+                                                         trackID: videoTrack.trackID, transform: transform, clip: clip,
+                                                         captions: renderedCaptions.filter {
+                        $0.end > cursor.seconds && $0.start < (cursor + clip.duration.cm).seconds
+                    }))
+                } else { try await background(start: cursor, duration: clip.duration.cm) }
+                if let sourceAudio = try await asset.loadTracks(withMediaType: .audio).first {
+                    let available = try await sourceAudio.load(.timeRange)
+                    let intersection = CMTimeRangeGetIntersection(range, otherRange: available)
+                    if intersection.duration > .zero {
+                        let position = cursor + (intersection.start - range.start)
+                        try soundTrack.insertTimeRange(intersection, of: sourceAudio, at: position)
+                    }
                 }
             }
             soundParameters.setVolume(Float(clip.volume), at: cursor)

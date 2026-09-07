@@ -39,7 +39,7 @@ final class TimelineTests: XCTestCase {
         let raw = String(decoding: bytes, as: UTF8.self)
         XCTAssertFalse(raw.contains("timelineStart"))
         let migrated = try Project.decode(bytes)
-        XCTAssertEqual(migrated.schemaVersion, 2)
+        XCTAssertEqual(migrated.schemaVersion, 3)
         XCTAssertEqual(migrated.clips.map { $0.timelineStart?.seconds }, [0, 10])
         XCTAssertEqual(try Project.decode(migrated.encoded()), migrated)
     }
