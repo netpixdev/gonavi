@@ -172,6 +172,7 @@ enum MediaEngine {
         var instructions: [FrameInstruction] = []
         let soundParameters = AVMutableAudioMixInputParameters(track: soundTrack)
         var mixParameters = [soundParameters]
+        var hasMainAudio = false
         var cursor = CMTime.zero
         var stillImages: [UUID: CIImage] = [:]
         func background(start: CMTime, duration: CMTime, clip: VideoClip? = nil, stillImage: CIImage? = nil) async throws {
@@ -224,6 +225,7 @@ enum MediaEngine {
                     if intersection.duration > .zero {
                         let position = cursor + (intersection.start - range.start)
                         try soundTrack.insertTimeRange(intersection, of: sourceAudio, at: position)
+                        hasMainAudio = true
                     }
                 }
             }
@@ -231,7 +233,12 @@ enum MediaEngine {
             cursor = cursor + clip.duration.cm
         }
         cursor = project.duration.cm
-        if soundTrack.timeRange.duration < cursor {
+        if !hasMainAudio {
+            // An all-empty audio track has no format description. AVAssetExportSession
+            // cannot encode it in a silent photo/video-only movie.
+            composition.removeTrack(soundTrack)
+            mixParameters.removeAll()
+        } else if soundTrack.timeRange.duration < cursor {
             soundTrack.insertEmptyTimeRange(CMTimeRange(start: soundTrack.timeRange.duration, duration: cursor - soundTrack.timeRange.duration))
         }
         if let music = project.music, cursor > .zero,

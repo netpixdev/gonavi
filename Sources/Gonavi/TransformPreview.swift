@@ -15,14 +15,15 @@ private struct SourceFrameKey: Equatable {
 @MainActor
 private final class PreviewSourceLoader: ObservableObject {
     @Published var image: CGImage?
+    @Published var key: SourceFrameKey?
     @Published var message: String?
-    func load(_ source: MediaSource?, time: Double) async {
-        image = nil; message = nil
-        guard let source else { return }
+    func load(_ request: SourceFrameKey, time: Double) async {
+        image = nil; key = nil; message = nil
+        guard let source = request.source else { return }
         do {
             let result = try await MediaEngine.previewSourceImage(source, at: time)
             try Task.checkCancellation()
-            image = result
+            image = result; key = request
         } catch {
             if !Task.isCancelled { message = "Görüntü düzenleme karesi okunamadı. Dosyayı yeniden bağlayın." }
         }
@@ -32,6 +33,7 @@ private final class PreviewSourceLoader: ObservableObject {
 struct TransformPreview: View {
     @ObservedObject var store: EditorStore
     @State private var tool: PreviewTool = .move
+    @State private var viewportZoom: Double = 1
     @StateObject private var loader = PreviewSourceLoader()
 
     private var clip: VideoClip? {
@@ -45,6 +47,9 @@ struct TransformPreview: View {
         guard let clip else { return 0 }
         return max(0, clip.sourceStart.seconds + store.playhead - store.project.start(of: clip.id).seconds)
     }
+    private var frameKey: SourceFrameKey {
+        SourceFrameKey(source: source, frame: source?.isStillImage == true ? 0 : Int64((sourceTime * Double(store.project.fps)).rounded()))
+    }
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 10) {
@@ -53,13 +58,18 @@ struct TransformPreview: View {
                     Label("Kırp", systemImage: "crop").tag(PreviewTool.crop)
                 }.pickerStyle(.segmented).frame(width: 155).disabled(clip == nil || !store.editable)
                 Spacer(minLength: 4)
+                Picker("Görünüm yakınlığı", selection: $viewportZoom) {
+                    ForEach([1.0, 0.5, 0.25, 0.1, 0.05], id: \.self) { zoom in
+                        Text("%\(Int(zoom * 100))").tag(zoom)
+                    }
+                }.labelsHidden().frame(width: 70).help("Önizleme yakınlığı; videonun ölçeğini değiştirmez")
                 Button { store.focusSelectedVisualClip() } label: { Image(systemName: "scope") }
                     .help("Seçili klibe git").disabled(store.activeClip == nil || !store.editable)
                 Button { store.resetVisualTransform() } label: { Image(systemName: "arrow.counterclockwise") }
                     .help("Görüntüyü sıfırla").disabled(clip == nil || !store.editable)
             }.buttonStyle(.borderless).padding(.horizontal, 16).padding(.vertical, 8)
             GeometryReader { proxy in
-                let rect = TransformCanvas.stageRect(in: CGRect(origin: .zero, size: proxy.size), scene: store.project.scene)
+                let rect = TransformCanvas.stageRect(in: CGRect(origin: .zero, size: proxy.size), scene: store.project.scene, zoom: viewportZoom)
                 ZStack {
                     PlayerSurface(player: store.player)
                         .frame(width: rect.width, height: rect.height)
@@ -69,7 +79,7 @@ struct TransformPreview: View {
                             .frame(width: rect.width, height: rect.height)
                             .position(x: rect.midX, y: rect.midY).allowsHitTesting(false)
                     }
-                    TransformSurface(store: store, clip: clip, image: loader.image, tool: tool)
+                    TransformSurface(store: store, clip: clip, image: loader.key == frameKey ? loader.image : nil, tool: tool, viewportZoom: viewportZoom)
                 }
             }
             Text(loader.message ?? (clip == nil ? "Düzenlemek için timeline’dan bir görüntü seçin." :
@@ -78,8 +88,8 @@ struct TransformPreview: View {
                 .font(.system(size: 10)).foregroundStyle(Theme.secondary).lineLimit(2)
                 .frame(minHeight: 28).padding(.horizontal, 12)
         }
-        .task(id: SourceFrameKey(source: source, frame: source?.isStillImage == true ? 0 : Int64((sourceTime * Double(store.project.fps)).rounded()))) {
-            await loader.load(source, time: sourceTime)
+        .task(id: frameKey) {
+            await loader.load(frameKey, time: sourceTime)
         }
     }
 }
@@ -89,9 +99,10 @@ private struct TransformSurface: NSViewRepresentable {
     let clip: VideoClip?
     let image: CGImage?
     let tool: PreviewTool
+    let viewportZoom: Double
     func makeNSView(context: Context) -> TransformCanvas { TransformCanvas() }
     func updateNSView(_ view: TransformCanvas, context: Context) {
-        view.configure(store: store, clip: clip, image: image, tool: tool)
+        view.configure(store: store, clip: clip, image: image, tool: tool, viewportZoom: viewportZoom)
     }
 }
 
@@ -105,6 +116,7 @@ final class TransformCanvas: NSView {
     private var sourceImage: CGImage?
     var hasSourceImage: Bool { sourceImage != nil }
     private var tool = PreviewTool.move
+    private var viewportZoom: Double = 1
     private var revision = -1
     private var captions: [RenderCaption] = []
     private let imageContext = CIContext(options: [.cacheIntermediates: false])
@@ -121,13 +133,13 @@ final class TransformCanvas: NSView {
     override var acceptsFirstResponder: Bool { true }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
-    static func stageRect(in bounds: CGRect, scene: ScenePreset) -> CGRect {
+    static func stageRect(in bounds: CGRect, scene: ScenePreset, zoom: Double = 1) -> CGRect {
         let available = bounds.insetBy(dx: 32, dy: 32)
-        let scale = max(0.001, min(available.width / CGFloat(scene.width), available.height / CGFloat(scene.height)))
+        let scale = max(0.001, min(available.width / CGFloat(scene.width), available.height / CGFloat(scene.height))) * CGFloat(zoom)
         let size = CGSize(width: CGFloat(scene.width) * scale, height: CGFloat(scene.height) * scale)
         return CGRect(x: bounds.midX - size.width / 2, y: bounds.midY - size.height / 2, width: size.width, height: size.height)
     }
-    var stage: CGRect { Self.stageRect(in: bounds, scene: store?.project.scene ?? .portrait) }
+    var stage: CGRect { Self.stageRect(in: bounds, scene: store?.project.scene ?? .portrait, zoom: viewportZoom) }
     private var sceneSize: CGSize {
         CGSize(width: store?.project.scene.width ?? 1080, height: store?.project.scene.height ?? 1920)
     }
@@ -139,8 +151,8 @@ final class TransformCanvas: NSView {
     private var canInteract: Bool {
         store?.editable == true && store?.isPlaying == false && clip != nil && sourceImage != nil
     }
-    func configure(store: EditorStore, clip: VideoClip?, image: CGImage?, tool: PreviewTool) {
-        if self.revision != store.revision || self.clip?.id != clip?.id || self.tool != tool || !store.editable || store.isPlaying {
+    func configure(store: EditorStore, clip: VideoClip?, image: CGImage?, tool: PreviewTool, viewportZoom: Double = 1) {
+        if self.revision != store.revision || self.clip?.id != clip?.id || self.tool != tool || self.viewportZoom != viewportZoom || !store.editable || store.isPlaying {
             cancelDraft()
         }
         if self.revision != store.revision {
@@ -148,6 +160,7 @@ final class TransformCanvas: NSView {
             captions = store.project.captions.compactMap { MediaEngine.renderCaption($0, size: size) }
         }
         self.store = store; self.clip = clip; sourceImage = image; self.tool = tool; revision = store.revision
+        self.viewportZoom = min(1, max(0.05, viewportZoom))
         needsDisplay = true
     }
     private func layout(for clip: VideoClip) -> VisualLayout {

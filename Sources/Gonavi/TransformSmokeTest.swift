@@ -89,9 +89,9 @@ enum TransformSmokeTest {
         transformedStore.seek(1)
         try await previewReady(transformedStore)
         try await snapshotEditor(transformedStore, size: CGSize(width: 1440, height: 900),
-                               to: directory.appendingPathComponent("transform-editor.png"))
+                               to: directory.appendingPathComponent("transform-colors-editor.png"))
         try await snapshotEditor(transformedStore, size: CGSize(width: 1040, height: 720),
-                               to: directory.appendingPathComponent("transform-compact.png"))
+                               to: directory.appendingPathComponent("transform-colors-compact.png"))
         transformedStore.player.replaceCurrentItem(with: nil)
         print("Transform: exporting cropped, rotated and positioned photo")
         let transformOutput = try await export(transformed, to: directory.appendingPathComponent("transformed.mp4"))
@@ -106,6 +106,7 @@ enum TransformSmokeTest {
         try save(frame, to: directory.appendingPathComponent("transformed-frame.png"))
         print("Transform: native preview move/resize/rotate/crop, undo and cancellation")
         try await nativeInteractions(store: transformedStore, source: plain, directory: directory)
+        try await videoAndPhotoScene(directory: directory)
 
         let report: [String: Any] = [
             "status": "PASS", "projectSchema": 3, "defaultPhotoSeconds": 5,
@@ -119,6 +120,39 @@ enum TransformSmokeTest {
         ]
         let data = try JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted, .sortedKeys])
         try data.write(to: directory.appendingPathComponent("transform-smoke.json"))
+    }
+
+    @MainActor private static func videoAndPhotoScene(directory: URL) async throws {
+        let videoURL = directory.appendingPathComponent("Kıyı yürüyüşü.mov")
+        try await SmokeTest.makeVideo(videoURL, red: 0.2, green: 0.5, illustrated: true)
+        let media = try await MediaEngine.inspect(videoURL)
+        let source = try await MediaEngine.previewSourceImage(media, at: 0.5)
+        let photoURL = directory.appendingPathComponent("Kıyıdan bir kare.png")
+        try save(source, to: photoURL)
+        let store = EditorStore(storageDirectory: directory.appendingPathComponent("visual-scene-state"))
+        _ = store.createProject(name: "Kıyı günlüğü · Kadraj çalışması", scene: .landscape, fps: 30)
+        store.importURLs([videoURL, photoURL]); try await ready(store)
+        store.mutate { project in
+            for i in project.clips.indices {
+                project.clips[i].zoom = 0.78
+                project.clips[i].rotation = -8
+                project.clips[i].crop = ClipCrop(left: 0.05, right: 0.05)
+                project.clips[i].offsetX = -0.05; project.clips[i].offsetY = 0.1
+            }
+            var caption = Caption(start: .init(seconds: 2), duration: .init(seconds: 4), text: "Hikâyeye kendi açından bak.")
+            caption.style = .clean; project.captions = [caption]
+        }
+        try await ready(store)
+        let project = store.project
+        let output = try await export(project, to: directory.appendingPathComponent("visual-scene.mp4"))
+        let generator = AVAssetImageGenerator(asset: output)
+        generator.requestedTimeToleranceBefore = .zero; generator.requestedTimeToleranceAfter = .zero
+        let videoFrame = try await generator.image(at: CMTime(seconds: 0.5, preferredTimescale: 60000)).image
+        try comparePlacedImage(videoFrame, source: source, scene: .landscape, clip: project.clips[0], message: "Video transform export")
+        store.selectedClip = project.clips[1].id; store.seek(3)
+        try await previewReady(store)
+        try await snapshotEditor(store, size: CGSize(width: 1440, height: 900), to: directory.appendingPathComponent("transform-editor.png"))
+        try await snapshotEditor(store, size: CGSize(width: 1040, height: 720), to: directory.appendingPathComponent("transform-compact.png"))
     }
 
     @MainActor private static func nativeInteractions(store: EditorStore, source: CGImage, directory: URL) async throws {
@@ -157,6 +191,13 @@ enum TransformSmokeTest {
         try SmokeTest.require(store.revision == moveRevision + 1 && store.project.clips[0].offsetX > 0.1 && store.project.clips[0].offsetY > 0.05,
                               "Native move must commit once and move right/up")
         store.undo(); try SmokeTest.require(store.project == original, "Native preview move did not undo once")
+        try await ready(store); configure()
+
+        store.updateClip { $0.zoom = 2 }
+        try await ready(store)
+        canvas.configure(store: store, clip: store.project.clips[0], image: source, tool: .move, viewportZoom: 0.25)
+        try SmokeTest.require(canvas.handlePoints().allSatisfy { canvas.bounds.contains($0) }, "Viewport zoom did not recover off-canvas resize handles")
+        store.undo(); try SmokeTest.require(store.project == original, "Viewport zoom changed project transform")
         try await ready(store); configure()
 
         canvas.mouseDown(with: mouse(.leftMouseDown, at: center))
@@ -309,7 +350,7 @@ enum TransformSmokeTest {
         exporter.outputURL = url; exporter.outputFileType = .mp4
         exporter.videoComposition = prepared.videoComposition; exporter.audioMix = prepared.audioMix
         await exporter.export()
-        try SmokeTest.require(exporter.status == .completed, exporter.error?.localizedDescription ?? "Photo export failed")
+        try SmokeTest.require(exporter.status == .completed, exporter.error.map { String(reflecting: $0 as NSError) } ?? "Photo export failed")
         let asset = AVURLAsset(url: url), duration = try await asset.load(.duration)
         try SmokeTest.require(abs(duration.seconds - project.duration.seconds) < 1.0 / Double(project.fps), "Photo export duration mismatch")
         return asset
