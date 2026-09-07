@@ -30,7 +30,7 @@ struct TimelinePanel: View {
                         .foregroundStyle(viewport.snapping ? Theme.accent : Theme.secondary)
                 }.help("Klip uçlarına ve oynatma çizgisine hizala · S · ⌥ ile geçici kapat")
                 Button(action: store.automaticSilences) { Label("Sessizlik", systemImage: "waveform.path") }
-                    .help("Sessiz alanları analiz et, dinle ve seçerek çıkar").disabled(store.project.clips.isEmpty || !store.editable)
+                    .help("Sessiz alanları analiz et, dinle ve seçerek çıkar").disabled(!store.hasTimedMedia || !store.editable)
                 Spacer()
                 Button { viewport.reveal(store.playhead) } label: { Image(systemName: "scope") }.help("Oynatma çizgisini göster")
                 Button { viewport.fit(store.project.duration.seconds) } label: { Text("Sığdır") }
@@ -152,8 +152,13 @@ private struct TimelineSurface: NSViewRepresentable {
             text((source?.isVisual == true ? "▸  " : "♫  ") + (source?.name ?? "Klip"),
                  at: NSPoint(x: max(rect.minX + 9, gutter + 6), y: 40), color: .white, size: 11,
                  width: max(0, visible.width - 15), weight: .medium)
-            drawWaveform(waveforms[clip.sourceID], rect: NSRect(x: rect.minX, y: 62, width: rect.width, height: 44),
-                         sourceStart: clip.sourceStart.seconds, duration: clip.duration.seconds, gain: clip.volume, color: color)
+            if source?.isStillImage == true {
+                text("Fotoğraf", at: NSPoint(x: max(rect.minX + 9, gutter + 6), y: 78),
+                     color: .secondaryLabelColor, size: 10, width: max(0, visible.width - 15))
+            } else {
+                drawWaveform(waveforms[clip.sourceID], rect: NSRect(x: rect.minX, y: 62, width: rect.width, height: 44),
+                             sourceStart: clip.sourceStart.seconds, duration: clip.duration.seconds, gain: clip.volume, color: color)
+            }
         }
         if let music = store.project.music, let source = store.project.sources.first(where: { $0.id == music.sourceID }) {
             let length = min(source.duration.seconds, store.project.duration.seconds)

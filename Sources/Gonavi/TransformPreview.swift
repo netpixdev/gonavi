@@ -56,7 +56,7 @@ struct TransformPreview: View {
                 Picker("Önizleme aracı", selection: $tool) {
                     Label("Taşı", systemImage: "arrow.up.and.down.and.arrow.left.and.right").tag(PreviewTool.move)
                     Label("Kırp", systemImage: "crop").tag(PreviewTool.crop)
-                }.pickerStyle(.segmented).frame(width: 155).disabled(clip == nil || !store.editable)
+                }.pickerStyle(.segmented).labelsHidden().frame(width: 155).disabled(clip == nil || !store.editable)
                 Spacer(minLength: 4)
                 Picker("Görünüm yakınlığı", selection: $viewportZoom) {
                     ForEach([1.0, 0.5, 0.25, 0.1, 0.05], id: \.self) { zoom in
